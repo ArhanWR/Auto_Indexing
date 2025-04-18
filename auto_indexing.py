@@ -117,7 +117,7 @@ def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
     return results
 
 # Create Index PDF
-def create_index_pdf(index_dict, output_path):
+def create_index_pdf(tfidf_dict, rake_dict, word2vec_dict, output_path):
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=A4)
     width, height = A4
@@ -126,29 +126,55 @@ def create_index_pdf(index_dict, output_path):
     margin_top = 800
     line_height = 14
     bottom_margin = 50
-
     y = margin_top
-    c.setFont("Helvetica", 12)
-    c.drawString(margin_left, y, "=== HASIL INDEXING OTOMATIS ===")
-    y -= line_height * 2
 
-    for keyword, pages in index_dict.items():
-        line = f"- {keyword} (halaman: {', '.join(map(str, pages))})"
-
-        # Jika baris terlalu rendah, pindah ke halaman baru
+    def draw_line(line):
+        nonlocal y
         if y < bottom_margin:
             c.showPage()
             y = margin_top
             c.setFont("Helvetica", 12)
-
         c.drawString(margin_left, y, line)
+        y -= line_height
+
+    # Judul tengah
+    title = "=== HASIL INDEXING OTOMATIS ==="
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(width / 2, y, title)
+    y -= line_height * 2
+
+    c.setFont("Helvetica", 12)
+
+    # TF-IDF Section
+    draw_line("1. Metode TF-IDF:")
+    y -= line_height
+    for keyword, pages in tfidf_dict.items():
+        draw_line(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
+    y -= line_height * 2
+
+    # RAKE Section
+    draw_line("2. Metode RAKE:")
+    y -= line_height
+    for keyword, pages in rake_dict.items():
+        draw_line(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
+    y -= line_height * 2
+
+    # Word2Vec Section
+    draw_line("3. Metode Word2Vec:")
+    y -= line_height
+    for keyword, results in word2vec_dict.items():
+        draw_line(f"- Kata kunci: {keyword}")
+        if isinstance(results, str):  # Jika tidak ditemukan dalam model
+            draw_line(f"   {results}")
+        else:
+            for sim_word, similarity, pages in results:
+                draw_line(f"   > {sim_word} (similarity: {similarity:.2f}, halaman: {', '.join(map(str, pages))})")
         y -= line_height
 
     c.save()
 
     with open(output_path, 'wb') as f:
         f.write(packet.getvalue())
-
 
 # Merge original and index PDF
 def merge_pdfs(original_pdf, index_pdf, output_pdf):
@@ -185,7 +211,7 @@ def index():
             index_pdf_path = os.path.join(RESULT_FOLDER, 'indexing.pdf')
             final_pdf_path = os.path.join(RESULT_FOLDER, f"final_{filename}")
 
-            create_index_pdf(tfidf_result[0], index_pdf_path)
+            create_index_pdf(tfidf_result[0], rake_result[0], w2v_result, index_pdf_path)
             merge_pdfs(filepath, index_pdf_path, final_pdf_path)
 
             download_link = f"/download/{os.path.basename(final_pdf_path)}"
