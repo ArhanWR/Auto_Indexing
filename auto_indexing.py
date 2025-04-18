@@ -1,5 +1,4 @@
-# auto_indexing.py
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, send_file
 import os
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfReader
@@ -10,18 +9,24 @@ import nltk
 from gensim.models import Word2Vec
 import re
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+import fitz  # PyMuPDF
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+import io
 
 # Setup
 nltk.download('stopwords')
 nltk.download('punkt')
 
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
 app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+RESULT_FOLDER = 'results'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(RESULT_FOLDER, exist_ok=True)
+
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+ALLOWED_EXTENSIONS = {'pdf'}
 
 # Helpers
 def allowed_file(filename):
@@ -111,27 +116,66 @@ def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
             results[word] = "Tidak ditemukan dalam model."
     return results
 
-# Routes
+# Create Index PDF
+def create_index_pdf(index_dict, output_path):
+    packet = io.BytesIO()
+    c = canvas.Canvas(packet, pagesize=A4)
+    textobject = c.beginText(40, 800)
+    textobject.setFont("Helvetica", 12)
+    textobject.textLine("=== HASIL INDEXING OTOMATIS ===")
+    for keyword, pages in index_dict.items():
+        textobject.textLine(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
+    c.drawText(textobject)
+    c.save()
+
+    with open(output_path, 'wb') as f:
+        f.write(packet.getvalue())
+
+# Merge original and index PDF
+def merge_pdfs(original_pdf, index_pdf, output_pdf):
+    merger = fitz.open(original_pdf)
+    index_doc = fitz.open(index_pdf)
+    merger.insert_pdf(index_doc)
+    merger.save(output_pdf)
+    merger.close()
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     results = {}
+    download_link = None
     if request.method == 'POST':
         file = request.files['file']
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
+
             documents = [read_pdf_with_pages(filepath)]
+
             tfidf_result = extract_tfidf_keywords_with_pages(documents)
             rake_result = extract_rake_keywords_with_pages(documents)
             w2v_model = train_word2vec(documents)
             w2v_result = find_similar_words_with_pages(w2v_model, documents, ["bluetooth", "gerbang", "otomatis"], topn=5)
+
             results = {
                 "tfidf": tfidf_result[0],
                 "rake": rake_result[0],
                 "word2vec": w2v_result
             }
-    return render_template('index.html', results=results)
+
+            index_pdf_path = os.path.join(RESULT_FOLDER, 'indexing.pdf')
+            final_pdf_path = os.path.join(RESULT_FOLDER, f"final_{filename}")
+
+            create_index_pdf(tfidf_result[0], index_pdf_path)
+            merge_pdfs(filepath, index_pdf_path, final_pdf_path)
+
+            download_link = f"/download/{os.path.basename(final_pdf_path)}"
+
+    return render_template('index.html', results=results, download_link=download_link)
+
+@app.route('/download/<filename>')
+def download(filename):
+    return send_file(os.path.join(RESULT_FOLDER, filename), as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
