@@ -155,7 +155,7 @@ def index():
             tfidf_result = extract_tfidf_keywords_with_pages(documents)
             rake_result = extract_rake_keywords_with_pages(documents)
             w2v_model = train_word2vec(documents)
-            w2v_result = find_similar_words_with_pages(w2v_model, documents, ["bluetooth", "gerbang", "otomatis"], topn=5)
+            w2v_result = find_similar_words_with_pages(w2v_model, documents, ["dokumen", "metode", "frekuensi"], topn=10)
 
             results = {
                 "tfidf": tfidf_result[0],
