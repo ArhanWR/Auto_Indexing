@@ -120,16 +120,35 @@ def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
 def create_index_pdf(index_dict, output_path):
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=A4)
-    textobject = c.beginText(40, 800)
-    textobject.setFont("Helvetica", 12)
-    textobject.textLine("=== HASIL INDEXING OTOMATIS ===")
+    width, height = A4
+
+    margin_left = 40
+    margin_top = 800
+    line_height = 14
+    bottom_margin = 50
+
+    y = margin_top
+    c.setFont("Helvetica", 12)
+    c.drawString(margin_left, y, "=== HASIL INDEXING OTOMATIS ===")
+    y -= line_height * 2
+
     for keyword, pages in index_dict.items():
-        textobject.textLine(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
-    c.drawText(textobject)
+        line = f"- {keyword} (halaman: {', '.join(map(str, pages))})"
+
+        # Jika baris terlalu rendah, pindah ke halaman baru
+        if y < bottom_margin:
+            c.showPage()
+            y = margin_top
+            c.setFont("Helvetica", 12)
+
+        c.drawString(margin_left, y, line)
+        y -= line_height
+
     c.save()
 
     with open(output_path, 'wb') as f:
         f.write(packet.getvalue())
+
 
 # Merge original and index PDF
 def merge_pdfs(original_pdf, index_pdf, output_pdf):
