@@ -51,7 +51,7 @@ def preprocess_text(text):
 
 def extract_tfidf_keywords(documents, top_n=50):
     texts = [" ".join([text for _, text in documents])]
-    vectorizer = TfidfVectorizer(max_features=5000, stop_words=stop_words)
+    vectorizer = TfidfVectorizer(stop_words=list(stop_words))
     X = vectorizer.fit_transform(texts)
     feature_array = vectorizer.get_feature_names_out()
     top_indices = X.toarray()[0].argsort()[-top_n:][::-1]
@@ -175,4 +175,4 @@ def download(filename):
     return send_file(os.path.join(RESULT_FOLDER, filename), as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
