@@ -13,10 +13,16 @@ import fitz  # PyMuPDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 import io
+from gensim.models import KeyedVectors
 
 # Setup
 nltk.download('stopwords')
 nltk.download('punkt')
+
+# Load pre-trained word2vec model
+def load_pretrained_word2vec(path='cc.id.300.vec'):
+    model = KeyedVectors.load_word2vec_format(path)
+    return model
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -97,16 +103,21 @@ def train_word2vec(documents, vector_size=150, window=10, min_count=5):
     return model
 
 def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
+    stop_words = stopwords.words('indonesian')
+    factory = StemmerFactory()
+    stemmer = factory.create_stemmer()
+
     results = {}
     for word in words_to_check:
-        if word in model.wv:
-            similar_words = model.wv.most_similar(word, topn=topn)
+        stemmed_word = stemmer.stem(word)
+        if stemmed_word in model:
+            similar_words = model.most_similar(stemmed_word, topn=topn)
             word_data = []
             for sim_word, similarity in similar_words:
                 pages_found = []
                 for doc in documents:
                     for page_number, page_text in doc:
-                        tokens = preprocess_text(page_text, stopwords.words('indonesian'))
+                        tokens = preprocess_text(page_text, stop_words)
                         if sim_word in tokens:
                             pages_found.append(page_number)
                 pages_found = list(set(pages_found))
@@ -188,6 +199,9 @@ def merge_pdfs(original_pdf, index_pdf, output_pdf):
 def index():
     results = {}
     download_link = None
+    # Load pre-trained word2vec model sekali saja
+    pretrained_w2v_model = load_pretrained_word2vec('cc.id.300.vec')
+
     if request.method == 'POST':
         file = request.files['file']
         if file and allowed_file(file.filename):
@@ -199,8 +213,7 @@ def index():
 
             tfidf_result = extract_tfidf_keywords_with_pages(documents)
             rake_result = extract_rake_keywords_with_pages(documents)
-            w2v_model = train_word2vec(documents)
-            w2v_result = find_similar_words_with_pages(w2v_model, documents, ["dokumen", "metode", "frekuensi"], topn=10)
+            w2v_result = find_similar_words_with_pages(pretrained_w2v_model, documents, ["dokumen", "metode", "frekuensi"], topn=10)
 
             results = {
                 "tfidf": tfidf_result[0],
