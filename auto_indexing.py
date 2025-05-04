@@ -6,23 +6,17 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
 from rake_nltk import Rake
 import nltk
-from gensim.models import Word2Vec
+from gensim.models import KeyedVectors  # menggunakan KeyedVectors, bukan Word2Vec
 import re
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 import fitz  # PyMuPDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 import io
-from gensim.models import KeyedVectors
 
 # Setup
 nltk.download('stopwords')
 nltk.download('punkt')
-
-# Load pre-trained word2vec model
-def load_pretrained_word2vec(path='cc.id.300.vec'):
-    model = KeyedVectors.load_word2vec_format(path)
-    return model
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -33,6 +27,13 @@ os.makedirs(RESULT_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 ALLOWED_EXTENSIONS = {'pdf'}
+
+# Load pre-trained Word2Vec model once at startup
+def load_pretrained_word2vec(model_path):
+    return KeyedVectors.load_word2vec_format(model_path)
+
+pretrained_w2v_path = 'cc.id.300.vec'  # pastikan file ini ada di folder yang sama
+w2v_model = load_pretrained_word2vec(pretrained_w2v_path)
 
 # Helpers
 def allowed_file(filename):
@@ -92,26 +93,12 @@ def preprocess_text(text, stop_words):
     tokens = [stemmer.stem(token) for token in tokens if token not in stop_words]
     return tokens
 
-def train_word2vec(documents, vector_size=150, window=10, min_count=5):
-    stop_words = stopwords.words('indonesian')
-    tokenized_documents = []
-    for doc in documents:
-        full_text = " ".join([text for _, text in doc])
-        tokens = preprocess_text(full_text, stop_words)
-        tokenized_documents.append(tokens)
-    model = Word2Vec(sentences=tokenized_documents, vector_size=vector_size, window=window, min_count=min_count, workers=4)
-    return model
-
 def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
     stop_words = stopwords.words('indonesian')
-    factory = StemmerFactory()
-    stemmer = factory.create_stemmer()
-
     results = {}
     for word in words_to_check:
-        stemmed_word = stemmer.stem(word)
-        if stemmed_word in model:
-            similar_words = model.most_similar(stemmed_word, topn=topn)
+        if word in model.key_to_index:
+            similar_words = model.most_similar(word, topn=topn)
             word_data = []
             for sim_word, similarity in similar_words:
                 pages_found = []
@@ -127,7 +114,6 @@ def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
             results[word] = "Tidak ditemukan dalam model."
     return results
 
-# Create Index PDF
 def create_index_pdf(tfidf_dict, rake_dict, word2vec_dict, output_path):
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=A4)
@@ -148,7 +134,6 @@ def create_index_pdf(tfidf_dict, rake_dict, word2vec_dict, output_path):
         c.drawString(margin_left, y, line)
         y -= line_height
 
-    # Judul tengah
     title = "=== HASIL INDEXING OTOMATIS ==="
     c.setFont("Helvetica-Bold", 14)
     c.drawCentredString(width / 2, y, title)
@@ -156,26 +141,23 @@ def create_index_pdf(tfidf_dict, rake_dict, word2vec_dict, output_path):
 
     c.setFont("Helvetica", 12)
 
-    # TF-IDF Section
     draw_line("1. Metode TF-IDF:")
     y -= line_height
     for keyword, pages in tfidf_dict.items():
         draw_line(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
     y -= line_height * 2
 
-    # RAKE Section
     draw_line("2. Metode RAKE:")
     y -= line_height
     for keyword, pages in rake_dict.items():
         draw_line(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
     y -= line_height * 2
 
-    # Word2Vec Section
     draw_line("3. Metode Word2Vec:")
     y -= line_height
     for keyword, results in word2vec_dict.items():
         draw_line(f"- Kata kunci: {keyword}")
-        if isinstance(results, str):  # Jika tidak ditemukan dalam model
+        if isinstance(results, str):
             draw_line(f"   {results}")
         else:
             for sim_word, similarity, pages in results:
@@ -187,7 +169,6 @@ def create_index_pdf(tfidf_dict, rake_dict, word2vec_dict, output_path):
     with open(output_path, 'wb') as f:
         f.write(packet.getvalue())
 
-# Merge original and index PDF
 def merge_pdfs(original_pdf, index_pdf, output_pdf):
     merger = fitz.open(original_pdf)
     index_doc = fitz.open(index_pdf)
@@ -199,9 +180,6 @@ def merge_pdfs(original_pdf, index_pdf, output_pdf):
 def index():
     results = {}
     download_link = None
-    # Load pre-trained word2vec model sekali saja
-    pretrained_w2v_model = load_pretrained_word2vec('cc.id.300.vec')
-
     if request.method == 'POST':
         file = request.files['file']
         if file and allowed_file(file.filename):
@@ -213,7 +191,7 @@ def index():
 
             tfidf_result = extract_tfidf_keywords_with_pages(documents)
             rake_result = extract_rake_keywords_with_pages(documents)
-            w2v_result = find_similar_words_with_pages(pretrained_w2v_model, documents, ["dokumen", "metode", "frekuensi"], topn=10)
+            w2v_result = find_similar_words_with_pages(w2v_model, documents, ["dokumen", "metode", "frekuensi"], topn=10)
 
             results = {
                 "tfidf": tfidf_result[0],
