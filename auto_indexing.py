@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
 from rake_nltk import Rake
 import nltk
-from gensim.models import KeyedVectors  # menggunakan KeyedVectors, bukan Word2Vec
+from gensim.models import KeyedVectors
 import re
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 import fitz  # PyMuPDF
@@ -23,17 +23,18 @@ UPLOAD_FOLDER = 'uploads'
 RESULT_FOLDER = 'results'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
-
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 ALLOWED_EXTENSIONS = {'pdf'}
 
-# Load pre-trained Word2Vec model once at startup
-def load_pretrained_word2vec(model_path):
-    return KeyedVectors.load_word2vec_format(model_path)
+# Load stopwords & stemmer
+stop_words = set(stopwords.words('indonesian'))
+stemmer = StemmerFactory().create_stemmer()
 
-pretrained_w2v_path = 'cc.id.300.vec'  # pastikan file ini ada di folder yang sama
-w2v_model = load_pretrained_word2vec(pretrained_w2v_path)
+# Load pre-trained fastText model
+print("Loading pre-trained Word2Vec model...")
+w2v_model = KeyedVectors.load_word2vec_format('cc.id.300.vec', binary=False)
+print("Model loaded.")
 
 # Helpers
 def allowed_file(filename):
@@ -41,134 +42,98 @@ def allowed_file(filename):
 
 def read_pdf_with_pages(file_path):
     reader = PdfReader(file_path)
-    text_by_page = []
-    for page_number, page in enumerate(reader.pages, start=1):
-        text = page.extract_text()
-        if text:
-            text_by_page.append((page_number, text))
-    return text_by_page
+    return [(i + 1, page.extract_text()) for i, page in enumerate(reader.pages) if page.extract_text()]
 
-def extract_tfidf_keywords_with_pages(documents, top_n=100):
-    stop_words = stopwords.words('indonesian')
-    vectorizer = TfidfVectorizer(max_features=5000, stop_words=stop_words)
-    full_texts = [" ".join([text for _, text in doc]) for doc in documents]
-    X = vectorizer.fit_transform(full_texts)
-    feature_array = vectorizer.get_feature_names_out()
-    tfidf_scores = X.toarray()
-    keywords_with_pages = []
-    for doc_idx, doc_scores in enumerate(tfidf_scores):
-        top_indices = doc_scores.argsort()[-top_n:][::-1]
-        top_keywords = [feature_array[i] for i in top_indices]
-        keyword_pages = {}
-        for page_number, page_text in documents[doc_idx]:
-            for keyword in top_keywords:
-                if keyword in page_text:
-                    if keyword not in keyword_pages:
-                        keyword_pages[keyword] = []
-                    keyword_pages[keyword].append(page_number)
-        keywords_with_pages.append(keyword_pages)
-    return keywords_with_pages
-
-def extract_rake_keywords_with_pages(documents, top_n=100):
-    rake_extractor = Rake(stopwords=stopwords.words('indonesian'))
-    keywords_with_pages = []
-    for doc in documents:
-        all_pages_keywords = {}
-        for page_number, page_text in doc:
-            rake_extractor.extract_keywords_from_text(page_text)
-            ranked_phrases = rake_extractor.get_ranked_phrases()
-            top_keywords = ranked_phrases[:top_n]
-            for keyword in top_keywords:
-                if keyword not in all_pages_keywords:
-                    all_pages_keywords[keyword] = []
-                all_pages_keywords[keyword].append(page_number)
-        keywords_with_pages.append(all_pages_keywords)
-    return keywords_with_pages
-
-def preprocess_text(text, stop_words):
+def preprocess_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
     tokens = nltk.word_tokenize(text)
-    factory = StemmerFactory()
-    stemmer = factory.create_stemmer()
-    tokens = [stemmer.stem(token) for token in tokens if token not in stop_words]
-    return tokens
+    return [stemmer.stem(t) for t in tokens if t not in stop_words]
 
-def find_similar_words_with_pages(model, documents, words_to_check, topn=10):
-    stop_words = stopwords.words('indonesian')
-    results = {}
+def extract_tfidf_keywords(documents, top_n=50):
+    texts = [" ".join([text for _, text in documents])]
+    vectorizer = TfidfVectorizer(max_features=5000, stop_words=stop_words)
+    X = vectorizer.fit_transform(texts)
+    feature_array = vectorizer.get_feature_names_out()
+    top_indices = X.toarray()[0].argsort()[-top_n:][::-1]
+    top_keywords = [feature_array[i] for i in top_indices]
+
+    page_map = {}
+    for page_number, page_text in documents:
+        lowered = page_text.lower()
+        for kw in top_keywords:
+            if kw in lowered:
+                page_map.setdefault(kw, set()).add(page_number)
+    return {k: sorted(v) for k, v in page_map.items()}
+
+def extract_rake_keywords(documents, top_n=50):
+    rake = Rake(stopwords=stop_words)
+    page_map = {}
+    for page_number, page_text in documents:
+        rake.extract_keywords_from_text(page_text)
+        top_keywords = rake.get_ranked_phrases()[:top_n]
+        for kw in top_keywords:
+            page_map.setdefault(kw, set()).add(page_number)
+    return {k: sorted(v) for k, v in page_map.items()}
+
+def find_similar_words(words_to_check, documents, topn=10):
+    result = {}
+    page_texts = {p: preprocess_text(t) for p, t in documents}
     for word in words_to_check:
-        if word in model.key_to_index:
-            similar_words = model.most_similar(word, topn=topn)
+        if word in w2v_model:
+            sims = w2v_model.most_similar(word, topn=topn)
             word_data = []
-            for sim_word, similarity in similar_words:
-                pages_found = []
-                for doc in documents:
-                    for page_number, page_text in doc:
-                        tokens = preprocess_text(page_text, stop_words)
-                        if sim_word in tokens:
-                            pages_found.append(page_number)
-                pages_found = list(set(pages_found))
+            for sim_word, similarity in sims:
+                pages_found = [p for p, tokens in page_texts.items() if sim_word in tokens]
                 word_data.append((sim_word, similarity, pages_found))
-            results[word] = word_data
+            result[word] = word_data
         else:
-            results[word] = "Tidak ditemukan dalam model."
-    return results
+            result[word] = "Tidak ditemukan dalam model."
+    return result
 
-def create_index_pdf(tfidf_dict, rake_dict, word2vec_dict, output_path):
+# Create Index PDF
+def create_index_pdf(tfidf, rake, w2v, output_path):
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=A4)
     width, height = A4
-
-    margin_left = 40
-    margin_top = 800
-    line_height = 14
-    bottom_margin = 50
-    y = margin_top
+    y = height - 50
 
     def draw_line(line):
         nonlocal y
-        if y < bottom_margin:
+        if y < 50:
             c.showPage()
-            y = margin_top
-            c.setFont("Helvetica", 12)
-        c.drawString(margin_left, y, line)
-        y -= line_height
+            y = height - 50
+        c.drawString(40, y, line)
+        y -= 14
 
-    title = "=== HASIL INDEXING OTOMATIS ==="
     c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(width / 2, y, title)
-    y -= line_height * 2
+    c.drawCentredString(width / 2, y, "=== HASIL INDEXING OTOMATIS ===")
+    y -= 28
 
     c.setFont("Helvetica", 12)
-
     draw_line("1. Metode TF-IDF:")
-    y -= line_height
-    for keyword, pages in tfidf_dict.items():
-        draw_line(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
-    y -= line_height * 2
+    for kw, pages in tfidf.items():
+        draw_line(f"- {kw} (hal: {', '.join(map(str, pages))})")
+    y -= 14
 
     draw_line("2. Metode RAKE:")
-    y -= line_height
-    for keyword, pages in rake_dict.items():
-        draw_line(f"- {keyword} (halaman: {', '.join(map(str, pages))})")
-    y -= line_height * 2
+    for kw, pages in rake.items():
+        draw_line(f"- {kw} (hal: {', '.join(map(str, pages))})")
+    y -= 14
 
     draw_line("3. Metode Word2Vec:")
-    y -= line_height
-    for keyword, results in word2vec_dict.items():
-        draw_line(f"- Kata kunci: {keyword}")
-        if isinstance(results, str):
-            draw_line(f"   {results}")
+    for kw, entries in w2v.items():
+        draw_line(f"- Kata kunci: {kw}")
+        if isinstance(entries, str):
+            draw_line(f"   {entries}")
         else:
-            for sim_word, similarity, pages in results:
-                draw_line(f"   > {sim_word} (similarity: {similarity:.2f}, halaman: {', '.join(map(str, pages))})")
-        y -= line_height
-
+            for sim, sim_val, pages in entries:
+                draw_line(f"   > {sim} ({sim_val:.2f}, hal: {', '.join(map(str, pages))})")
     c.save()
 
     with open(output_path, 'wb') as f:
         f.write(packet.getvalue())
 
+# Merge original and index PDF
 def merge_pdfs(original_pdf, index_pdf, output_pdf):
     merger = fitz.open(original_pdf)
     index_doc = fitz.open(index_pdf)
@@ -178,34 +143,30 @@ def merge_pdfs(original_pdf, index_pdf, output_pdf):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    results = {}
-    download_link = None
+    results, download_link = {}, None
     if request.method == 'POST':
         file = request.files['file']
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
             file.save(filepath)
 
-            documents = [read_pdf_with_pages(filepath)]
-
-            tfidf_result = extract_tfidf_keywords_with_pages(documents)
-            rake_result = extract_rake_keywords_with_pages(documents)
-            w2v_result = find_similar_words_with_pages(w2v_model, documents, ["dokumen", "metode", "frekuensi"], topn=10)
+            documents = read_pdf_with_pages(filepath)
+            tfidf_result = extract_tfidf_keywords(documents)
+            rake_result = extract_rake_keywords(documents)
+            w2v_result = find_similar_words(["dokumen", "metode", "frekuensi"], documents)
 
             results = {
-                "tfidf": tfidf_result[0],
-                "rake": rake_result[0],
+                "tfidf": tfidf_result,
+                "rake": rake_result,
                 "word2vec": w2v_result
             }
 
-            index_pdf_path = os.path.join(RESULT_FOLDER, 'indexing.pdf')
-            final_pdf_path = os.path.join(RESULT_FOLDER, f"final_{filename}")
-
-            create_index_pdf(tfidf_result[0], rake_result[0], w2v_result, index_pdf_path)
-            merge_pdfs(filepath, index_pdf_path, final_pdf_path)
-
-            download_link = f"/download/{os.path.basename(final_pdf_path)}"
+            index_pdf = os.path.join(RESULT_FOLDER, 'indexing.pdf')
+            final_pdf = os.path.join(RESULT_FOLDER, f"final_{filename}")
+            create_index_pdf(tfidf_result, rake_result, w2v_result, index_pdf)
+            merge_pdfs(filepath, index_pdf, final_pdf)
+            download_link = f"/download/{os.path.basename(final_pdf)}"
 
     return render_template('index.html', results=results, download_link=download_link)
 
