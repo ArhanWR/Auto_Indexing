@@ -28,7 +28,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {'pdf'}
 
 # Load stopwords & stemmer
-stop_words = set(stopwords.words('indonesian'))
+stop_words = set(stopwords.words('indonesian') + stopwords.words('english'))
 stemmer = StemmerFactory().create_stemmer()
 
 # Load pre-trained fastText model
@@ -49,6 +49,11 @@ def preprocess_text(text):
     tokens = nltk.word_tokenize(text)
     return [stemmer.stem(t) for t in tokens if t not in stop_words]
 
+def clean_text(text):
+    text = re.sub(r'[^a-zA-Z\s]', ' ', text)  
+    text = re.sub(r'\s+', ' ', text)     
+    return text.lower()   
+
 def extract_tfidf_keywords(documents, top_n=50):
     texts = [" ".join([text for _, text in documents])]
     vectorizer = TfidfVectorizer(stop_words=list(stop_words))
@@ -65,14 +70,25 @@ def extract_tfidf_keywords(documents, top_n=50):
                 page_map.setdefault(kw, set()).add(page_number)
     return {k: sorted(v) for k, v in page_map.items()}
 
-def extract_rake_keywords(documents, top_n=50):
+def extract_rake_keywords(documents, top_n=50, min_length=2, max_length=5):
     rake = Rake(stopwords=stop_words)
     page_map = {}
+
     for page_number, page_text in documents:
-        rake.extract_keywords_from_text(page_text)
+        cleaned_text = clean_text(page_text) 
+        rake.extract_keywords_from_text(cleaned_text)
         top_keywords = rake.get_ranked_phrases()[:top_n]
+
+        # post-filtering hasil
+        filtered_keywords = []
         for kw in top_keywords:
+            words = kw.split()
+            if min_length <= len(words) <= max_length and all(w.isalpha() for w in words):
+                filtered_keywords.append(kw)
+
+        for kw in filtered_keywords:
             page_map.setdefault(kw, set()).add(page_number)
+
     return {k: sorted(v) for k, v in page_map.items()}
 
 def find_similar_words(words_to_check, documents, topn=10):
@@ -112,12 +128,12 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
     c.setFont("Helvetica", 12)
     draw_line("1. Metode TF-IDF:")
     for kw, pages in tfidf.items():
-        draw_line(f"- {kw} (hal: {', '.join(map(str, pages))})")
+        draw_line(f"- {kw} (Halaman: {', '.join(map(str, pages))})")
     y -= 14
 
     draw_line("2. Metode RAKE:")
     for kw, pages in rake.items():
-        draw_line(f"- {kw} (hal: {', '.join(map(str, pages))})")
+        draw_line(f"- {kw} (Halaman: {', '.join(map(str, pages))})")
     y -= 14
 
     draw_line("3. Metode Word2Vec:")
@@ -127,7 +143,7 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
             draw_line(f"   {entries}")
         else:
             for sim, sim_val, pages in entries:
-                draw_line(f"   > {sim} ({sim_val:.2f}, hal: {', '.join(map(str, pages))})")
+                draw_line(f"   > {sim} ({sim_val:.2f}, Halaman: {', '.join(map(str, pages))})")
     c.save()
 
     with open(output_path, 'wb') as f:
