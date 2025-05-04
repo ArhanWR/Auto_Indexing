@@ -1,0 +1,24 @@
+# Ignore pretrained FastText vectors
+*.vec
+
+# Python cache and virtual environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VSCode settings
+.vscode/
+
+# MacOS system files
+.DS_Store
+
+# Logs
+*.log
