@@ -44,6 +44,20 @@ def read_pdf_with_pages(file_path):
     reader = PdfReader(file_path)
     return [(i + 1, page.extract_text()) for i, page in enumerate(reader.pages) if page.extract_text()]
 
+def extract_title_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    first_page = doc[0]
+    blocks = first_page.get_text("dict")["blocks"]
+    max_font_size = 0
+    title = ""
+    for block in blocks:
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                if span["size"] > max_font_size:
+                    max_font_size = span["size"]
+                    title = span["text"]
+    return title if title else "Tidak ditemukan judul"
+
 def preprocess_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
     tokens = nltk.word_tokenize(text)
@@ -100,8 +114,14 @@ def find_similar_words(words_to_check, documents, topn=10):
             word_data = []
             for sim_word, similarity in sims:
                 pages_found = [p for p, tokens in page_texts.items() if sim_word in tokens]
-                word_data.append((sim_word, similarity, pages_found))
-            result[word] = word_data
+                if pages_found:
+                    word_data.append((sim_word, similarity, pages_found))
+            # Urutkan dari similarity terbesar → terkecil
+            word_data.sort(key=lambda x: x[1], reverse=True)
+            if word_data:
+                result[word] = word_data
+            else:
+                result[word] = "Tidak ada kata mirip yang ditemukan di dokumen."
         else:
             result[word] = "Tidak ditemukan dalam model."
     return result
@@ -168,11 +188,16 @@ def index():
             file.save(filepath)
 
             documents = read_pdf_with_pages(filepath)
+            title = extract_title_from_pdf(filepath)
+            title_tokens = preprocess_text(title)
+            words_to_check = [word for word in title_tokens if word in w2v_model]
+
             tfidf_result = extract_tfidf_keywords(documents)
             rake_result = extract_rake_keywords(documents)
-            w2v_result = find_similar_words(["dokumen", "metode", "frekuensi"], documents)
+            w2v_result = find_similar_words(words_to_check, documents)
 
             results = {
+                "title": title,
                 "tfidf": tfidf_result,
                 "rake": rake_result,
                 "word2vec": w2v_result
