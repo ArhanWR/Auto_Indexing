@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
 from rake_nltk import Rake
 import nltk
-from gensim.models import KeyedVectors
+from gensim.models import KeyedVectors  # Word2Vec
 import re
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 import fitz  # PyMuPDF
@@ -32,9 +32,15 @@ stop_words = set(stopwords.words('indonesian') + stopwords.words('english'))
 stemmer = StemmerFactory().create_stemmer()
 
 # Load pre-trained fastText model
-print("Loading pre-trained Word2Vec model...")
-w2v_model = KeyedVectors.load_word2vec_format('cc.id.300.vec', binary=False)
-print("Model loaded.")
+model_path = 'cc.id.300.gensim.model'
+if os.path.exists(model_path):
+    print("Loading saved model...")
+    w2v_model = KeyedVectors.load(model_path)
+else:
+    print("Loading .vec model")
+    w2v_model = KeyedVectors.load_word2vec_format('cc.id.300.vec')
+    w2v_model.save(model_path)
+    print("Saved model")
 
 # Helpers
 def allowed_file(filename):
@@ -216,4 +222,4 @@ def download(filename):
     return send_file(os.path.join(RESULT_FOLDER, filename), as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False)
+    app.run(debug=True)

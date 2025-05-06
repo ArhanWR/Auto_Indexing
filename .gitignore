@@ -1,5 +1,7 @@
 # Ignore pretrained FastText vectors
 *.vec
+*.gensim.model
+*.gensim.model.vectors.npy
 
 # Python cache and virtual environment
 __pycache__/
