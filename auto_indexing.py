@@ -13,6 +13,7 @@ import fitz  # PyMuPDF
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 import io
+from collections import Counter
 
 # Setup
 nltk.download('stopwords')
@@ -90,26 +91,37 @@ def extract_tfidf_keywords(documents, top_n=50):
                 page_map.setdefault(kw, set()).add(page_number)
     return {k: sorted(v) for k, v in page_map.items()}
 
-def extract_rake_keywords(documents, top_n=50, min_length=2, max_length=5):
+def extract_rake_keywords(documents, top_n=50, min_length=2, max_length=3):
     rake = Rake(stopwords=stop_words)
+    phrase_counter = Counter()  # untuk menyimpan frekuensi kemunculan
     page_map = {}
 
     for page_number, page_text in documents:
-        cleaned_text = clean_text(page_text) 
+        cleaned_text = clean_text(page_text)
         rake.extract_keywords_from_text(cleaned_text)
         top_keywords = rake.get_ranked_phrases()[:top_n]
 
-        # post-filtering hasil
+        # filter hasil
         filtered_keywords = []
         for kw in top_keywords:
             words = kw.split()
             if min_length <= len(words) <= max_length and all(w.isalpha() for w in words):
                 filtered_keywords.append(kw)
 
+        # hitung frekuensi + map halaman
         for kw in filtered_keywords:
+            phrase_counter[kw] += cleaned_text.lower().count(kw.lower())  # tambahkan frekuensi kemunculan
             page_map.setdefault(kw, set()).add(page_number)
 
-    return {k: sorted(v) for k, v in page_map.items()}
+    # urutkan berdasarkan frekuensi kemunculan dari besar ke kecil
+    sorted_phrases = phrase_counter.most_common()
+
+    # buat hasil akhir: {frasa: [list halaman]}
+    result = {}
+    for phrase, freq in sorted_phrases:
+        result[phrase] = sorted(page_map[phrase])
+
+    return result
 
 def find_similar_words(words_to_check, documents, topn=10):
     result = {}
