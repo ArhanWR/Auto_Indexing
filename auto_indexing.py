@@ -53,17 +53,24 @@ def read_pdf_with_pages(file_path):
 
 def extract_title_from_pdf(pdf_path):
     doc = fitz.open(pdf_path)
-    first_page = doc[0]
-    blocks = first_page.get_text("dict")["blocks"]
     max_font_size = 0
     title = ""
-    for block in blocks:
-        for line in block.get("lines", []):
-            for span in line.get("spans", []):
-                if span["size"] > max_font_size:
-                    max_font_size = span["size"]
-                    title = span["text"]
-    return title if title else "Tidak ditemukan judul"
+    
+    pages_to_check = min(5, len(doc))  # Cek 5 halaman pertama atau kurang jika total halaman < 5
+    
+    for i in range(pages_to_check):
+        page = doc[i]
+        blocks = page.get_text("dict")["blocks"]
+        
+        for block in blocks:
+            if "lines" in block:
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        if span["size"] > max_font_size and span["text"].isupper():
+                            max_font_size = span["size"]
+                            title = span["text"]
+    return title
+
 
 def preprocess_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
@@ -105,7 +112,11 @@ def extract_rake_keywords(documents, top_n=50, min_length=2, max_length=3):
         filtered_keywords = []
         for kw in top_keywords:
             words = kw.split()
-            if min_length <= len(words) <= max_length and all(w.isalpha() for w in words):
+            if (
+                min_length <= len(words) <= max_length and
+                all(w.isalpha() and len(w) >= 3 for w in words) and
+                len(set(words)) > 1  # hindari kata yang sama berulang seperti 'z z z'
+            ):
                 filtered_keywords.append(kw)
 
         # hitung frekuensi + map halaman
