@@ -51,26 +51,6 @@ def read_pdf_with_pages(file_path):
     reader = PdfReader(file_path)
     return [(i + 1, page.extract_text()) for i, page in enumerate(reader.pages) if page.extract_text()]
 
-def extract_title_from_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
-    max_font_size = 0
-    title = ""
-    
-    pages_to_check = min(5, len(doc))  # Cek 5 halaman pertama atau kurang jika total halaman < 5
-    
-    for i in range(pages_to_check):
-        page = doc[i]
-        blocks = page.get_text("dict")["blocks"]
-        
-        for block in blocks:
-            if "lines" in block:
-                for line in block["lines"]:
-                    for span in line["spans"]:
-                        if span["size"] > max_font_size and span["text"].isupper():
-                            max_font_size = span["size"]
-                            title = span["text"]
-    return title
-
 
 def preprocess_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
@@ -134,23 +114,24 @@ def extract_rake_keywords(documents, top_n=50, min_length=2, max_length=3):
 
     return result
 
-def find_similar_words(words_to_check, documents, topn=10):
+def find_similar_words(words_to_check, documents, threshold=0.1, max_results=25):
     result = {}
     page_texts = {p: preprocess_text(t) for p, t in documents}
+    
+    # Gabungkan semua token dari semua halaman
+    all_tokens = set(token for tokens in page_texts.values() for token in tokens)
+    
     for word in words_to_check:
         if word in w2v_model:
-            sims = w2v_model.most_similar(word, topn=topn)
             word_data = []
-            for sim_word, similarity in sims:
-                pages_found = [p for p, tokens in page_texts.items() if sim_word in tokens]
-                if pages_found:
-                    word_data.append((sim_word, similarity, pages_found))
-            # Urutkan dari similarity terbesar → terkecil
-            word_data.sort(key=lambda x: x[1], reverse=True)
-            if word_data:
-                result[word] = word_data
-            else:
-                result[word] = "Tidak ada kata mirip yang ditemukan di dokumen."
+            for token in all_tokens:
+                if token in w2v_model:
+                    similarity = w2v_model.similarity(word, token)
+                    if similarity >= threshold:
+                        pages_found = [p for p, tokens in page_texts.items() if token in tokens]
+                        word_data.append((token, similarity, pages_found))
+            word_data.sort(key=lambda x: x[1], reverse=True)  # urutkan skor tertinggi
+            result[word] = word_data[:max_results] if word_data else "Tidak ada kata mirip yang ditemukan di dokumen."
         else:
             result[word] = "Tidak ditemukan dalam model."
     return result
@@ -211,13 +192,15 @@ def index():
     results, download_link = {}, None
     if request.method == 'POST':
         file = request.files['file']
+        manual_title = request.form.get('manual_title', '')
+
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             file.save(filepath)
 
             documents = read_pdf_with_pages(filepath)
-            title = extract_title_from_pdf(filepath)
+            title = manual_title
             title_tokens = preprocess_text(title)
             words_to_check = [word for word in title_tokens if word in w2v_model]
 
