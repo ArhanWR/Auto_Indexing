@@ -78,39 +78,53 @@ def extract_tfidf_keywords(documents, top_n=50):
                 page_map.setdefault(kw, set()).add(page_number)
     return {k: sorted(v) for k, v in page_map.items()}
 
-def extract_rake_keywords(documents, top_n=50, min_length=2, max_length=3):
+def compute_similarity(phrase, title):
+    phrase_tokens = [w for w in phrase.lower().split() if w in w2v_model]
+    title_tokens = [w for w in title.lower().split() if w in w2v_model]
+
+    if not phrase_tokens or not title_tokens:
+        return 0.0
+
+    try:
+        return w2v_model.n_similarity(phrase_tokens, title_tokens)
+    except:
+        return 0.0
+
+def extract_rake_keywords(documents, title="", top_n=50, min_length=2, max_length=3):
     rake = Rake(stopwords=stop_words)
-    phrase_counter = Counter()  # untuk menyimpan frekuensi kemunculan
+    phrase_counter = Counter()
     page_map = {}
+    similarity_scores = {}
 
     for page_number, page_text in documents:
         cleaned_text = clean_text(page_text)
         rake.extract_keywords_from_text(cleaned_text)
         top_keywords = rake.get_ranked_phrases()[:top_n]
 
-        # filter hasil
         filtered_keywords = []
         for kw in top_keywords:
             words = kw.split()
             if (
                 min_length <= len(words) <= max_length and
                 all(w.isalpha() and len(w) >= 3 for w in words) and
-                len(set(words)) > 1  # hindari kata yang sama berulang seperti 'z z z'
+                len(set(words)) > 1
             ):
                 filtered_keywords.append(kw)
 
-        # hitung frekuensi + map halaman
         for kw in filtered_keywords:
-            phrase_counter[kw] += cleaned_text.lower().count(kw.lower())  # tambahkan frekuensi kemunculan
+            phrase_counter[kw] += cleaned_text.lower().count(kw.lower())
             page_map.setdefault(kw, set()).add(page_number)
 
-    # urutkan berdasarkan frekuensi kemunculan dari besar ke kecil
     sorted_phrases = phrase_counter.most_common()
-
-    # buat hasil akhir: {frasa: [list halaman]}
     result = {}
+
     for phrase, freq in sorted_phrases:
-        result[phrase] = sorted(page_map[phrase])
+        sim_score = compute_similarity(phrase, title) if title else 0.0
+        result[phrase] = {
+            "pages": sorted(page_map[phrase]),
+            "frequency": freq,
+            "similarity": sim_score
+        }
 
     return result
 
@@ -162,8 +176,11 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
     y -= 14
 
     draw_line("2. Metode RAKE:")
-    for kw, pages in rake.items():
-        draw_line(f"- {kw} (Halaman: {', '.join(map(str, pages))})")
+    for kw, data in rake.items():
+        pages = ', '.join(map(str, data["pages"]))
+        freq = data["frequency"]
+        sim = data["similarity"]
+        draw_line(f"- {kw} (Halaman: {pages}, Frek: {freq}, Similaritas: {sim:.2f})")
     y -= 14
 
     draw_line("3. Metode Word2Vec:")
@@ -205,7 +222,7 @@ def index():
             words_to_check = [word for word in title_tokens if word in w2v_model]
 
             tfidf_result = extract_tfidf_keywords(documents)
-            rake_result = extract_rake_keywords(documents)
+            rake_result = extract_rake_keywords(documents, title=title)
             w2v_result = find_similar_words(words_to_check, documents)
 
             results = {

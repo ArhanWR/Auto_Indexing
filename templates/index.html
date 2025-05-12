@@ -49,10 +49,15 @@
             <div class="card-header bg-warning text-dark">📝 Hasil RAKE</div>
             <div class="card-body">
                 <table class="table table-bordered table-striped table-sm">
-                    <thead><tr><th>Frase Kunci</th><th>Halaman</th></tr></thead>
+                    <thead><tr><th>Frasa Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Skor</th></tr></thead>
                     <tbody>
-                    {% for keyword, pages in results.rake.items() %}
-                        <tr><td>{{ keyword }}</td><td>{{ pages | join(', ') }}</td></tr>
+                    {% for keyword, data in results.rake.items() %}
+                    <tr>
+                        <td>{{ keyword }}</td>
+                        <td>{{ data.pages | join(', ') }}</td>
+                        <td>{{ data.frequency }}</td>
+                        <td>{{ "%.2f"|format(data.similarity) }}</td>
+                    </tr>
                     {% endfor %}
                     </tbody>
                 </table>
