@@ -14,6 +14,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 import io
 from collections import Counter
+from textwrap import wrap
 
 # Setup
 nltk.download('stopwords')
@@ -63,12 +64,16 @@ def clean_text(text):
     return text.lower()   
 
 def extract_tfidf_keywords(documents, top_n=100):
-    texts = [" ".join([text for _, text in documents])]
+    texts = [" ".join([clean_text(text) for _, text in documents])] 
     vectorizer = TfidfVectorizer(stop_words=list(stop_words))
     X = vectorizer.fit_transform(texts)
     feature_array = vectorizer.get_feature_names_out()
+
+    # Filter hanya kata yang terdiri dari huruf
+    feature_array = [kw for kw in feature_array if kw.isalpha()]
+
     top_indices = X.toarray()[0].argsort()[-top_n:][::-1]
-    top_keywords = [feature_array[i] for i in top_indices]
+    top_keywords = [feature_array[i] for i in top_indices if i < len(feature_array)]
 
     page_map = {}
     for page_number, page_text in documents:
@@ -77,6 +82,7 @@ def extract_tfidf_keywords(documents, top_n=100):
             if kw in lowered:
                 page_map.setdefault(kw, set()).add(page_number)
     return {k: sorted(v) for k, v in page_map.items()}
+
 
 def compute_similarity(phrase, title):
     phrase_tokens = [w for w in phrase.lower().split() if w in w2v_model]
@@ -161,13 +167,15 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
     width, height = A4
     y = height - 50
 
-    def draw_line(line):
+    def draw_line(line, max_width=90):
         nonlocal y
-        if y < 50:
-            c.showPage()
-            y = height - 50
-        c.drawString(40, y, line)
-        y -= 14
+        wrapped_lines = wrap(line, width=max_width)
+        for wrapped_line in wrapped_lines:
+            if y < 50:
+                c.showPage()
+                y = height - 50
+            c.drawString(40, y, wrapped_line)
+            y -= 14
 
     c.setFont("Helvetica-Bold", 14)
     c.drawCentredString(width / 2, y, "=== HASIL INDEXING OTOMATIS ===")
@@ -195,8 +203,8 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
         else:
             for sim, sim_val, pages in entries:
                 draw_line(f"   > {sim} ({sim_val:.2f}, Halaman: {', '.join(map(str, pages))})")
-    c.save()
 
+    c.save()
     with open(output_path, 'wb') as f:
         f.write(packet.getvalue())
 
