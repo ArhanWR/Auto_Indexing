@@ -132,7 +132,7 @@ def extract_rake_keywords(documents, title="", top_n=100, min_length=2, max_leng
 
     return result
 
-def find_similar_words(words_to_check, documents, threshold=0.1, max_results=25):
+def find_similar_words(words_to_check, documents, threshold=0.1, max_results=100):
     result = {}
     page_texts = {p: preprocess_text(t) for p, t in documents}
     
