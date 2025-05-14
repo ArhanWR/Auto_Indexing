@@ -62,7 +62,7 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text)     
     return text.lower()   
 
-def extract_tfidf_keywords(documents, top_n=50):
+def extract_tfidf_keywords(documents, top_n=100):
     texts = [" ".join([text for _, text in documents])]
     vectorizer = TfidfVectorizer(stop_words=list(stop_words))
     X = vectorizer.fit_transform(texts)
@@ -90,7 +90,7 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_rake_keywords(documents, title="", top_n=50, min_length=2, max_length=3):
+def extract_rake_keywords(documents, title="", top_n=100, min_length=2, max_length=3):
     rake = Rake(stopwords=stop_words)
     phrase_counter = Counter()
     page_map = {}
@@ -115,11 +115,15 @@ def extract_rake_keywords(documents, title="", top_n=50, min_length=2, max_lengt
             phrase_counter[kw] += cleaned_text.lower().count(kw.lower())
             page_map.setdefault(kw, set()).add(page_number)
 
-    sorted_phrases = phrase_counter.most_common()
-    result = {}
-
-    for phrase, freq in sorted_phrases:
+    scored_phrases = []
+    for phrase in phrase_counter:
         sim_score = compute_similarity(phrase, title) if title else 0.0
+        scored_phrases.append((phrase, phrase_counter[phrase], sim_score))
+
+    # Urutkan dari similarity terbesar ke terkecil
+    sorted_phrases = sorted(scored_phrases, key=lambda x: x[2], reverse=True)[:top_n]
+    result = {}
+    for phrase, freq, sim_score in sorted_phrases:
         result[phrase] = {
             "pages": sorted(page_map[phrase]),
             "frequency": freq,

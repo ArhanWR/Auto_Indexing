@@ -49,7 +49,7 @@
             <div class="card-header bg-warning text-dark">📝 Hasil RAKE</div>
             <div class="card-body">
                 <table class="table table-bordered table-striped table-sm">
-                    <thead><tr><th>Frasa Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Skor</th></tr></thead>
+                    <thead><tr><th>Frasa Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Similaritas</th></tr></thead>
                     <tbody>
                     {% for keyword, data in results.rake.items() %}
                     <tr>
@@ -73,7 +73,7 @@
                         <p>{{ related }}</p>
                     {% else %}
                         <table class="table table-bordered table-sm">
-                            <thead><tr><th>Kata Mirip</th><th>Skor</th><th>Halaman</th></tr></thead>
+                            <thead><tr><th>Kata Mirip</th><th>Skor Similaritas</th><th>Halaman</th></tr></thead>
                             <tbody>
                             {% for sim_word, sim_score, sim_pages in related %}
                                 <tr>
