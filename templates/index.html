@@ -23,11 +23,14 @@
                     <input type="file" class="form-control" name="file" accept=".pdf" required>
                 </div>
                 <div class="col-md-2">
-                    <button type="submit" class="btn btn-success w-100">Proses</button>
+                    <button type="submit" class="btn btn-success w-100" id="submitBtn">
+                        <span id="submitText">Proses</span>
+                        <span id="spinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    </button>
                 </div>
                 <div class="col-12">
                     <label for="manual_title" class="form-label mt-3">Topik untuk Word2Vec</label>
-                    <input type="text" class="form-control" name="manual_title" id="manual_title" placeholder="Masukkan topik..." required>
+                    <input type="text" class="form-control" name="manual_title" id="manual_title" placeholder="Masukkan topik..." pattern="[a-zA-Z\s]+" required>
                 </div>
             </form>
         </div>
@@ -38,11 +41,18 @@
             <div class="card-header bg-success text-white">🔍 Hasil TF-IDF</div>
             <div class="card-body">
                 <table id="tfidfTable" class="table table-bordered table-striped table-sm">
-                    <thead><tr><th>Kata Kunci</th><th>Halaman</th></tr></thead>
+                    <thead class="table-light">
+                        <tr><th>Kata Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Similaritas</th></tr>
+                    </thead>
                     <tbody>
-                    {% for keyword, pages in results.tfidf.items() %}
-                        <tr><td>{{ keyword }}</td><td>{{ pages | join(', ') }}</td></tr>
-                    {% endfor %}
+                        {% for keyword, data in results.tfidf.items() %}
+                            <tr>
+                                <td>{{ keyword }}</td>
+                                <td>{{ data.pages | join(', ') }}</td>
+                                <td>{{ "%.4f"|format(data.score) }}</td>
+                                <td>{{ "%.2f"|format(data.similarity) }}</td>
+                            </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
@@ -114,6 +124,14 @@ $(document).ready(function () {
     $('.word2vec-table').each(function () {
         $(this).DataTable({ pageLength: 10 });
     });
+});
+</script>
+
+<script>
+$('form').on('submit', function () {
+    $('#submitBtn').prop('disabled', true);
+    $('#submitText').text('Memproses...');
+    $('#spinner').removeClass('d-none');
 });
 </script>
 

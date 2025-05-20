@@ -52,7 +52,6 @@ def read_pdf_with_pages(file_path):
     reader = PdfReader(file_path)
     return [(i + 1, page.extract_text()) for i, page in enumerate(reader.pages) if page.extract_text()]
 
-
 def preprocess_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
     tokens = nltk.word_tokenize(text)
@@ -62,27 +61,6 @@ def clean_text(text):
     text = re.sub(r'[^a-zA-Z\s]', ' ', text)  
     text = re.sub(r'\s+', ' ', text)     
     return text.lower()   
-
-def extract_tfidf_keywords(documents, top_n=100):
-    texts = [" ".join([clean_text(text) for _, text in documents])] 
-    vectorizer = TfidfVectorizer(stop_words=list(stop_words))
-    X = vectorizer.fit_transform(texts)
-    feature_array = vectorizer.get_feature_names_out()
-
-    # Filter hanya kata yang terdiri dari huruf
-    feature_array = [kw for kw in feature_array if kw.isalpha()]
-
-    top_indices = X.toarray()[0].argsort()[-top_n:][::-1]
-    top_keywords = [feature_array[i] for i in top_indices if i < len(feature_array)]
-
-    page_map = {}
-    for page_number, page_text in documents:
-        lowered = page_text.lower()
-        for kw in top_keywords:
-            if kw in lowered:
-                page_map.setdefault(kw, set()).add(page_number)
-    return {k: sorted(v) for k, v in page_map.items()}
-
 
 def compute_similarity(phrase, title):
     phrase_tokens = [w for w in phrase.lower().split() if w in w2v_model]
@@ -96,7 +74,49 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_rake_keywords(documents, title="", top_n=100, min_length=2, max_length=3):
+def extract_tfidf_keywords(documents, title=""):
+    texts = [" ".join([clean_text(text) for _, text in documents])] 
+
+    vectorizer = TfidfVectorizer(stop_words=list(stop_words))
+    X = vectorizer.fit_transform(texts)
+    feature_array = vectorizer.get_feature_names_out()
+    tfidf_scores = X.toarray()[0]
+
+    # Filter hanya kata alfabet dan panjang >= 3
+    keyword_scores = {
+        feature_array[i]: tfidf_scores[i]
+        for i in range(len(feature_array))
+        if feature_array[i].isalpha() and len(feature_array[i]) >= 3
+    }
+
+    # Urutkan berdasarkan skor TF-IDF (tertinggi ke terendah)
+    sorted_keywords = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
+
+    page_map = {}
+    similarity_map = {}
+
+    for kw, score in sorted_keywords:
+        # Hitung similarity antara kata dan title
+        sim_score = compute_similarity(kw, title) if title else 0.0
+        similarity_map[kw] = sim_score
+
+        # Cek kemunculan di halaman
+        for page_number, page_text in documents:
+            if kw in page_text.lower():
+                page_map.setdefault(kw, set()).add(page_number)
+
+    result = {
+        kw: {
+            "score": round(score, 4),
+            "similarity": round(similarity_map[kw], 4),
+            "pages": sorted(page_map.get(kw, []))
+        }
+        for kw, score in sorted_keywords
+    }
+
+    return result
+
+def extract_rake_keywords(documents, title="", min_length=2, max_length=3):
     rake = Rake(stopwords=stop_words)
     phrase_counter = Counter()
     page_map = {}
@@ -105,10 +125,12 @@ def extract_rake_keywords(documents, title="", top_n=100, min_length=2, max_leng
     for page_number, page_text in documents:
         cleaned_text = clean_text(page_text)
         rake.extract_keywords_from_text(cleaned_text)
-        top_keywords = rake.get_ranked_phrases()[:top_n]
+
+        # Ambil SEMUA frasa tanpa top_n
+        all_keywords = rake.get_ranked_phrases()
 
         filtered_keywords = []
-        for kw in top_keywords:
+        for kw in all_keywords:
             words = kw.split()
             if (
                 min_length <= len(words) <= max_length and
@@ -126,8 +148,9 @@ def extract_rake_keywords(documents, title="", top_n=100, min_length=2, max_leng
         sim_score = compute_similarity(phrase, title) if title else 0.0
         scored_phrases.append((phrase, phrase_counter[phrase], sim_score))
 
-    # Urutkan dari similarity terbesar ke terkecil
-    sorted_phrases = sorted(scored_phrases, key=lambda x: x[2], reverse=True)[:top_n]
+    # Urutkan dari similarity terbesar ke terkecil, tanpa membatasi jumlahnya
+    sorted_phrases = sorted(scored_phrases, key=lambda x: x[2], reverse=True)
+
     result = {}
     for phrase, freq, sim_score in sorted_phrases:
         result[phrase] = {
@@ -183,8 +206,11 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
 
     c.setFont("Helvetica", 12)
     draw_line("1. Metode TF-IDF:")
-    for kw, pages in tfidf.items():
-        draw_line(f"- {kw} (Halaman: {', '.join(map(str, pages))})")
+    for kw, data in tfidf.items():
+        pages = ', '.join(map(str, data["pages"]))
+        score = data["score"]
+        sim = data["similarity"]
+        draw_line(f"- {kw} (Frekuensi: {score:.4f}, Similaritas: {sim:.2f}, Halaman: {pages})")
     y -= 14
 
     draw_line("2. Metode RAKE:")
@@ -233,7 +259,7 @@ def index():
             title_tokens = preprocess_text(title)
             words_to_check = [word for word in title_tokens if word in w2v_model]
 
-            tfidf_result = extract_tfidf_keywords(documents)
+            tfidf_result = extract_tfidf_keywords(documents, title=title)
             rake_result = extract_rake_keywords(documents, title=title)
             w2v_result = find_similar_words(words_to_check, documents)
 
