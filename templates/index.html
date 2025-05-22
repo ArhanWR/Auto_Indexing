@@ -30,7 +30,7 @@
                 </div>
                 <div class="col-12">
                     <label for="manual_title" class="form-label mt-3">Topik untuk Word2Vec</label>
-                    <input type="text" class="form-control" name="manual_title" id="manual_title" placeholder="Masukkan topik..." pattern="[a-zA-Z\s]+" required>
+                    <input type="text" class="form-control" name="manual_title" id="manual_title" placeholder="Masukkan topik..." required>
                 </div>
             </form>
         </div>
@@ -74,31 +74,6 @@
                     {% endfor %}
                     </tbody>
                 </table>
-            </div>
-        </div>
-
-        <div class="card mb-4">
-            <div class="card-header bg-info text-white">🤖 Hasil Word2Vec</div>
-            <div class="card-body">
-                {% for word, related in results.word2vec.items() %}
-                    <h5><strong>{{ word }}</strong></h5>
-                    {% if related is string %}
-                        <p>{{ related }}</p>
-                    {% else %}
-                        <table id="w2vTable{{ loop.index }}" class="word2vec-table table table-bordered table-sm">
-                            <thead><tr><th>Kata Mirip</th><th>Skor Similaritas</th><th>Halaman</th></tr></thead>
-                            <tbody>
-                            {% for sim_word, sim_score, sim_pages in related %}
-                                <tr>
-                                    <td>{{ sim_word }}</td>
-                                    <td>{{ "%.3f"|format(sim_score) }}</td>
-                                    <td>{{ sim_pages | join(', ') }}</td>
-                                </tr>
-                            {% endfor %}
-                            </tbody>
-                        </table>
-                    {% endif %}
-                {% endfor %}
             </div>
         </div>
 

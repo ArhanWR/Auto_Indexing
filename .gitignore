@@ -24,3 +24,7 @@ env/
 
 # Logs
 *.log
+
+# Folders
+/uploads/
+/results/

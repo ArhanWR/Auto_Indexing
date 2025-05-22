@@ -116,7 +116,7 @@ def extract_tfidf_keywords(documents, title=""):
 
     return result
 
-def extract_rake_keywords(documents, title="", min_length=2, max_length=3):
+def extract_rake_keywords(documents, title="", min_length=1, max_length=3):
     rake = Rake(stopwords=stop_words)
     phrase_counter = Counter()
     page_map = {}
@@ -134,8 +134,7 @@ def extract_rake_keywords(documents, title="", min_length=2, max_length=3):
             words = kw.split()
             if (
                 min_length <= len(words) <= max_length and
-                all(w.isalpha() and len(w) >= 3 for w in words) and
-                len(set(words)) > 1
+                all(w.isalpha() and len(w) >= 3 for w in words)
             ):
                 filtered_keywords.append(kw)
 
@@ -161,30 +160,8 @@ def extract_rake_keywords(documents, title="", min_length=2, max_length=3):
 
     return result
 
-def find_similar_words(words_to_check, documents, threshold=0.1, max_results=100):
-    result = {}
-    page_texts = {p: preprocess_text(t) for p, t in documents}
-    
-    # Gabungkan semua token dari semua halaman
-    all_tokens = set(token for tokens in page_texts.values() for token in tokens)
-    
-    for word in words_to_check:
-        if word in w2v_model:
-            word_data = []
-            for token in all_tokens:
-                if token in w2v_model:
-                    similarity = w2v_model.similarity(word, token)
-                    if similarity >= threshold:
-                        pages_found = [p for p, tokens in page_texts.items() if token in tokens]
-                        word_data.append((token, similarity, pages_found))
-            word_data.sort(key=lambda x: x[1], reverse=True)  # urutkan skor tertinggi
-            result[word] = word_data[:max_results] if word_data else "Tidak ada kata mirip yang ditemukan di dokumen."
-        else:
-            result[word] = "Tidak ditemukan dalam model."
-    return result
-
 # Create Index PDF
-def create_index_pdf(tfidf, rake, w2v, output_path):
+def create_index_pdf(tfidf, rake, output_path):
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=A4)
     width, height = A4
@@ -219,16 +196,6 @@ def create_index_pdf(tfidf, rake, w2v, output_path):
         freq = data["frequency"]
         sim = data["similarity"]
         draw_line(f"- {kw} (Halaman: {pages}, Frek: {freq}, Similaritas: {sim:.2f})")
-    y -= 14
-
-    draw_line("3. Metode Word2Vec:")
-    for kw, entries in w2v.items():
-        draw_line(f"- Kata kunci: {kw}")
-        if isinstance(entries, str):
-            draw_line(f"   {entries}")
-        else:
-            for sim, sim_val, pages in entries:
-                draw_line(f"   > {sim} ({sim_val:.2f}, Halaman: {', '.join(map(str, pages))})")
 
     c.save()
     with open(output_path, 'wb') as f:
@@ -261,18 +228,16 @@ def index():
 
             tfidf_result = extract_tfidf_keywords(documents, title=title)
             rake_result = extract_rake_keywords(documents, title=title)
-            w2v_result = find_similar_words(words_to_check, documents)
 
             results = {
                 "title": title,
                 "tfidf": tfidf_result,
-                "rake": rake_result,
-                "word2vec": w2v_result
+                "rake": rake_result
             }
 
             index_pdf = os.path.join(RESULT_FOLDER, 'indexing.pdf')
             final_pdf = os.path.join(RESULT_FOLDER, f"final_{filename}")
-            create_index_pdf(tfidf_result, rake_result, w2v_result, index_pdf)
+            create_index_pdf(tfidf_result, rake_result, index_pdf)
             merge_pdfs(filepath, index_pdf, final_pdf)
             download_link = f"/download/{os.path.basename(final_pdf)}"
 
