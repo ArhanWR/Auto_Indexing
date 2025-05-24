@@ -74,48 +74,6 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_tfidf_keywords(documents, title=""):
-    texts = [" ".join([clean_text(text) for _, text in documents])] 
-
-    vectorizer = TfidfVectorizer(stop_words=list(stop_words))
-    X = vectorizer.fit_transform(texts)
-    feature_array = vectorizer.get_feature_names_out()
-    tfidf_scores = X.toarray()[0]
-
-    # Filter hanya kata alfabet dan panjang >= 3
-    keyword_scores = {
-        feature_array[i]: tfidf_scores[i]
-        for i in range(len(feature_array))
-        if feature_array[i].isalpha() and len(feature_array[i]) >= 3
-    }
-
-    # Urutkan berdasarkan skor TF-IDF (tertinggi ke terendah)
-    sorted_keywords = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
-
-    page_map = {}
-    similarity_map = {}
-
-    for kw, score in sorted_keywords:
-        # Hitung similarity antara kata dan title
-        sim_score = compute_similarity(kw, title) if title else 0.0
-        similarity_map[kw] = sim_score
-
-        # Cek kemunculan di halaman
-        for page_number, page_text in documents:
-            if kw in page_text.lower():
-                page_map.setdefault(kw, set()).add(page_number)
-
-    result = {
-        kw: {
-            "score": round(score, 4),
-            "similarity": round(similarity_map[kw], 4),
-            "pages": sorted(page_map.get(kw, []))
-        }
-        for kw, score in sorted_keywords
-    }
-
-    return result
-
 def extract_rake_keywords(documents, title="", min_length=1, max_length=3):
     rake = Rake(stopwords=stop_words)
     phrase_counter = Counter()
@@ -126,9 +84,7 @@ def extract_rake_keywords(documents, title="", min_length=1, max_length=3):
         cleaned_text = clean_text(page_text)
         rake.extract_keywords_from_text(cleaned_text)
 
-        # Ambil SEMUA frasa tanpa top_n
         all_keywords = rake.get_ranked_phrases()
-
         filtered_keywords = []
         for kw in all_keywords:
             words = kw.split()
@@ -143,25 +99,27 @@ def extract_rake_keywords(documents, title="", min_length=1, max_length=3):
             page_map.setdefault(kw, set()).add(page_number)
 
     scored_phrases = []
-    for phrase in phrase_counter:
+    for phrase, freq in phrase_counter.items():
         sim_score = compute_similarity(phrase, title) if title else 0.0
-        scored_phrases.append((phrase, phrase_counter[phrase], sim_score))
+        if 0.3 <= sim_score <= 1.0:
+            scored_phrases.append((phrase, freq, sim_score))
+            
+    # Urutkan berdasarkan frekuensi tertinggi, ambil top 100
+    sorted_phrases = sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:100]
 
-    # Urutkan dari similarity terbesar ke terkecil, tanpa membatasi jumlahnya
-    sorted_phrases = sorted(scored_phrases, key=lambda x: x[2], reverse=True)
-
-    result = {}
-    for phrase, freq, sim_score in sorted_phrases:
-        result[phrase] = {
-            "pages": sorted(page_map[phrase]),
+    result = {
+        phrase: {
             "frequency": freq,
-            "similarity": sim_score
+            "similarity": round(sim_score, 4),
+            "pages": sorted(page_map.get(phrase, []))
         }
+        for phrase, freq, sim_score in sorted_phrases
+    }
 
     return result
 
 # Create Index PDF
-def create_index_pdf(tfidf, rake, output_path):
+def create_index_pdf(rake, output_path):
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=A4)
     width, height = A4
@@ -182,14 +140,6 @@ def create_index_pdf(tfidf, rake, output_path):
     y -= 28
 
     c.setFont("Helvetica", 12)
-    draw_line("1. Metode TF-IDF:")
-    for kw, data in tfidf.items():
-        pages = ', '.join(map(str, data["pages"]))
-        score = data["score"]
-        sim = data["similarity"]
-        draw_line(f"- {kw} (Frekuensi: {score:.4f}, Similaritas: {sim:.2f}, Halaman: {pages})")
-    y -= 14
-
     draw_line("2. Metode RAKE:")
     for kw, data in rake.items():
         pages = ', '.join(map(str, data["pages"]))
@@ -224,20 +174,16 @@ def index():
             documents = read_pdf_with_pages(filepath)
             title = manual_title
             title_tokens = preprocess_text(title)
-            words_to_check = [word for word in title_tokens if word in w2v_model]
-
-            tfidf_result = extract_tfidf_keywords(documents, title=title)
             rake_result = extract_rake_keywords(documents, title=title)
 
             results = {
                 "title": title,
-                "tfidf": tfidf_result,
                 "rake": rake_result
             }
 
             index_pdf = os.path.join(RESULT_FOLDER, 'indexing.pdf')
             final_pdf = os.path.join(RESULT_FOLDER, f"final_{filename}")
-            create_index_pdf(tfidf_result, rake_result, index_pdf)
+            create_index_pdf(rake_result, index_pdf)
             merge_pdfs(filepath, index_pdf, final_pdf)
             download_link = f"/download/{os.path.basename(final_pdf)}"
 
