@@ -38,28 +38,7 @@
 
     {% if results %}
         <div class="card mb-4">
-            <div class="card-header bg-success text-white">🔍 Hasil TF-IDF</div>
-            <div class="card-body">
-                <table id="tfidfTable" class="table table-bordered table-striped table-sm">
-                    <thead class="table-light">
-                        <tr><th>Kata Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Similaritas</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for keyword, data in results.tfidf.items() %}
-                            <tr>
-                                <td>{{ keyword }}</td>
-                                <td>{{ data.pages | join(', ') }}</td>
-                                <td>{{ "%.4f"|format(data.score) }}</td>
-                                <td>{{ "%.2f"|format(data.similarity) }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card mb-4">
-            <div class="card-header bg-warning text-dark">📝 Hasil RAKE</div>
+            <div class="card-header bg-warning text-dark">📝 Hasil Indexing</div>
             <div class="card-body">
                 <table id="rakeTable" class="table table-bordered table-striped table-sm">
                     <thead><tr><th>Frasa Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Similaritas</th></tr></thead>
