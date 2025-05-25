@@ -334,7 +334,10 @@ def generate_pdf():
 def cari_frasa():
     frasa = request.form.get('frasa_manual', '').strip().lower()
     filepath = session.get('uploaded_pdf_path')
-    if not frasa or not filepath:
+    rake_result = session.get('rake_result', {})
+
+    if not frasa or not filepath or not rake_result:
+        print("Gagal: frasa / filepath / rake_result tidak lengkap")
         return redirect('/')
 
     documents = read_pdf_with_pages(filepath)
@@ -343,16 +346,32 @@ def cari_frasa():
         if frasa in text.lower():
             frasa_pages.append(page_number)
 
-    # Ambil hasil sebelumnya dari session (jika ada)
+    # Ambil hasil sebelumnya
     results = session.get('frasa_manual_result', [])
-    # Tambahkan frasa baru ke hasil
     results.append({
         'frasa': frasa,
         'pages': sorted(list(set(frasa_pages))) if frasa_pages else []
     })
-
-    # Simpan kembali ke session
     session['frasa_manual_result'] = results
+
+    # Gabungkan hasil
+    manual_as_dict = {
+        item['frasa']: {
+            'pages': item['pages'],
+            'frequency': len(item['pages']) if item['pages'] else 0,
+            'similarity': 0.0
+        }
+        for item in results
+    }
+    combined_full_result = {**rake_result, **manual_as_dict}
+
+    # Buat ulang PDF index lengkap
+    filename = os.path.basename(filepath)
+    index_pdf = os.path.join(RESULT_FOLDER, 'indexing.pdf')
+    final_pdf = os.path.join(RESULT_FOLDER, f"final_{filename}")
+    create_index_pdf(combined_full_result, index_pdf)
+    merge_pdfs(filepath, index_pdf, final_pdf)
+    session['download_link'] = f"/download/{os.path.basename(final_pdf)}"
     return redirect('/')
 
 @app.route('/download/<filename>')
