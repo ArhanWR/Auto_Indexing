@@ -37,6 +37,17 @@
     </div>
 
     {% if results %}
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">🔍 Cari Frasa Tambahan</div>
+            <div class="card-body">
+                <form method="post" action="/cari_frasa">
+                    <div class="input-group">
+                        <input type="text" name="frasa_manual" class="form-control" placeholder="Masukkan frasa..." required>
+                        <button type="submit" class="btn btn-info">Cari</button>
+                    </div>
+                </form>
+            </div>
+        </div>
         <form method="post" action="/generate_pdf" id="generateForm">
             <div class="card mb-4">
                 <div class="card-header bg-warning text-dark">📝 Hasil Indexing</div>
@@ -69,6 +80,40 @@
                     <button type="submit" class="d-none" id="submitHiddenButton"></button>
                 </div>
             </div>
+
+            {% if session['frasa_manual_result'] %}
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">📌 Hasil Pencarian Frasa Manual</div>
+                <div class="card-body">
+                    <table class="table table-bordered table-sm">
+                        <thead>
+                            <tr>
+                                <th>Pilih</th>
+                                <th>Frasa</th>
+                                <th>Halaman</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in session['frasa_manual_result'] %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="selected_manual_phrases" value="{{ item.frasa }}">
+                                </td>
+                                <td>{{ item.frasa }}</td>
+                                <td>
+                                    {% if item.pages %}
+                                        {{ item.pages | join(', ') }}
+                                    {% else %}
+                                        <em>Tidak ditemukan</em>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
         </form>
 
         {% if download_link %}

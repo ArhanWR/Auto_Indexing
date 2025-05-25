@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, send_file, session
+from flask import Flask, render_template, request, send_file, session, redirect
 import os
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfReader
@@ -153,6 +153,8 @@ def create_index_pdf(rake, output_path):
 
     index_data = defaultdict(list)
     for kw, data in rake.items():
+        if not data.get("pages"):  # skip keyword tanpa halaman
+            continue
         first_letter = kw[0].upper()
         pages = sorted(set(data["pages"]))
         index_data[first_letter].append((kw, pages))
@@ -167,6 +169,7 @@ def create_index_pdf(rake, output_path):
     x = margin_x
     col = 0
     c.setFont("Helvetica", 10)
+
     for letter in sorted_letters:
         if y < min_y:
             if col == 0:
@@ -180,21 +183,18 @@ def create_index_pdf(rake, output_path):
                 y = y_start
                 c.setFont("Helvetica", 10)
 
-        # Jarak tambahan antar huruf
         y -= line_height * 1.5
         c.setFont("Helvetica-Bold", 12)
         c.drawString(x, y, letter)
-        # Tambahkan underline
+        underline_y = y - 2
         text_width = c.stringWidth(letter, "Helvetica-Bold", 12)
-        underline_y = y - 2  # sedikit di bawah teks
         c.line(x, underline_y, x + text_width, underline_y)
         y -= line_height
         c.setFont("Helvetica", 10)
-        
+
         for keyword, pages in index_data[letter]:
             page_str = ', '.join(map(str, pages))
             line = f"{keyword}, {page_str}"
-            # Wrap halaman jika terlalu panjang
             wrapped_lines = wrap_text(line, col_width, c)
             for line_item in wrapped_lines:
                 if y < min_y:
@@ -257,42 +257,103 @@ def index():
             session['rake_result'] = rake_result_clean
             session['uploaded_pdf_path'] = filepath
 
-            results = {
-                "title": title,
-                "rake": rake_result
+            # Dapatkan hasil frasa manual dari session (jika ada)
+            manual_result = session.get('frasa_manual_result', [])
+            manual_as_dict = {
+                item['frasa']: {
+                    'pages': item['pages'],
+                    'frequency': len(item['pages']) if item['pages'] else 0,
+                    'similarity': 0.0
+                }
+                for item in manual_result
             }
 
+            combined_full_result = {**rake_result, **manual_as_dict}
+
+            # Buat PDF index lengkap
             index_pdf = os.path.join(RESULT_FOLDER, 'indexing.pdf')
             final_pdf = os.path.join(RESULT_FOLDER, f"final_{filename}")
-            create_index_pdf(rake_result, index_pdf)
+            create_index_pdf(combined_full_result, index_pdf)
             merge_pdfs(filepath, index_pdf, final_pdf)
             download_link = f"/download/{os.path.basename(final_pdf)}"
 
-    return render_template('index.html', results=results, download_link=download_link)
+            results = {
+                "title": title,
+                "rake": rake_result,
+                "manual": manual_as_dict,
+                "combined": combined_full_result
+            }
+            session['results'] = results
+            session['download_link'] = download_link
+
+    return render_template(
+        'index.html',
+        results=session.get('results', {}),
+        download_link=session.get('download_link'),
+        frasa_manual_result=session.get('frasa_manual_result')
+    )
 
 @app.route('/generate_pdf', methods=['POST'])
 def generate_pdf():
     selected_keywords = request.form.getlist('selected_keywords')
-    if not selected_keywords:
+    selected_manual_phrases = request.form.getlist('selected_manual_phrases')
+    if not selected_keywords and not selected_manual_phrases:
         return "Tidak ada frasa kunci yang dipilih.", 400
 
-    # Ambil hasil RAKE dari session
     rake_result = session.get('rake_result', {})
+    manual_result = session.get('frasa_manual_result', [])
     original_pdf_path = session.get('uploaded_pdf_path')
-    if not rake_result or not original_pdf_path:
+    if not original_pdf_path:
         return "Data tidak ditemukan di sesi.", 400
 
-    # Filter hanya keyword yang dipilih
-    filtered_result = {
+    # Ambil data hasil yang dipilih dari indexing otomatis
+    filtered_rake = {
         kw: data for kw, data in rake_result.items() if kw in selected_keywords
     }
 
+    # Ambil data hasil frasa manual yang dipilih
+    filtered_manual = {}
+    for item in manual_result:
+        if item['frasa'] in selected_manual_phrases:
+            filtered_manual[item['frasa']] = {
+                'pages': item['pages'],
+                'frequency': len(item['pages']) if item['pages'] else 0,
+                'similarity': 0.0  # atau None jika tidak tersedia
+            }
+
+    # Gabungkan hasil terpilih dari RAKE dan manual
+    combined_result = {**filtered_rake, **filtered_manual}
     index_pdf = os.path.join(RESULT_FOLDER, 'selected_indexing.pdf')
     final_pdf = os.path.join(RESULT_FOLDER, 'final_selected.pdf')
 
-    create_index_pdf(filtered_result, index_pdf)
+    create_index_pdf(combined_result, index_pdf)
     merge_pdfs(original_pdf_path, index_pdf, final_pdf)
     return send_file(final_pdf, as_attachment=True)
+
+@app.route('/cari_frasa', methods=['POST'])
+def cari_frasa():
+    frasa = request.form.get('frasa_manual', '').strip().lower()
+    filepath = session.get('uploaded_pdf_path')
+    if not frasa or not filepath:
+        return redirect('/')
+
+    documents = read_pdf_with_pages(filepath)
+    frasa_pages = []
+    for page_number, text in documents:
+        if frasa in text.lower():
+            frasa_pages.append(page_number)
+
+    # Ambil hasil sebelumnya dari session (jika ada)
+    results = session.get('frasa_manual_result', [])
+    # Tambahkan frasa baru ke hasil
+    results.append({
+        'frasa': frasa,
+        'pages': sorted(list(set(frasa_pages))) if frasa_pages else []
+    })
+
+    # Simpan kembali ke session
+    session['frasa_manual_result'] = results
+    return redirect('/')
 
 @app.route('/download/<filename>')
 def download(filename):
