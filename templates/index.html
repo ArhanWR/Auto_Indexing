@@ -37,29 +37,45 @@
     </div>
 
     {% if results %}
-        <div class="card mb-4">
-            <div class="card-header bg-warning text-dark">📝 Hasil Indexing</div>
-            <div class="card-body">
-                <table id="rakeTable" class="table table-bordered table-striped table-sm">
-                    <thead><tr><th>Frasa Kunci</th><th>Halaman</th><th>Frekuensi</th><th>Similaritas</th></tr></thead>
-                    <tbody>
-                    {% for keyword, data in results.rake.items() %}
-                    <tr>
-                        <td>{{ keyword }}</td>
-                        <td>{{ data.pages | join(', ') }}</td>
-                        <td>{{ data.frequency }}</td>
-                        <td>{{ "%.2f"|format(data.similarity) }}</td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+        <form method="post" action="/generate_pdf" id="generateForm">
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">📝 Hasil Indexing</div>
+                <div class="card-body">
+                    <table id="rakeTable" class="table table-bordered table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Pilih</th>
+                                <th>Frasa Kunci</th>
+                                <th>Halaman</th>
+                                <th>Frekuensi</th>
+                                <th>Similaritas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for keyword, data in results.rake.items() %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" name="selected_keywords" value="{{ keyword }}">
+                            </td>
+                            <td>{{ keyword }}</td>
+                            <td>{{ data.pages | join(', ') }}</td>
+                            <td>{{ data.frequency }}</td>
+                            <td>{{ "%.2f"|format(data.similarity) }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    <!-- Tombol ini disembunyikan, hanya untuk kompatibilitas JS -->
+                    <button type="submit" class="d-none" id="submitHiddenButton"></button>
+                </div>
             </div>
-        </div>
+        </form>
 
         {% if download_link %}
             <div class="alert alert-success text-center">
                 ✅ Index berhasil ditambahkan ke PDF. <br>
-                <a class="btn btn-outline-primary mt-2" href="{{ download_link }}">📥 Download PDF Final</a>
+                <a class="btn btn-outline-primary mt-2" href="{{ download_link }}">📥 Download Index Full</a>
+                <a class="btn btn-outline-success mt-2" id="downloadSelectedBtn">📥 Download Index Terpilih</a>
             </div>
         {% endif %}
     {% endif %}
@@ -86,6 +102,17 @@ $('form').on('submit', function () {
     $('#submitBtn').prop('disabled', true);
     $('#submitText').text('Memproses...');
     $('#spinner').removeClass('d-none');
+});
+</script>
+
+<script>
+document.getElementById('downloadSelectedBtn')?.addEventListener('click', function () {
+    const checkboxes = document.querySelectorAll('input[name="selected_keywords"]:checked');
+    if (checkboxes.length === 0) {
+        alert("⚠️ Silakan pilih frasa kunci terlebih dahulu.");
+    } else {
+        document.getElementById('generateForm').submit();
+    }
 });
 </script>
 
