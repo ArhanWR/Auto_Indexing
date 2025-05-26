@@ -242,6 +242,8 @@ def index():
         manual_title = request.form.get('manual_title', '')
 
         if file and allowed_file(file.filename):
+            session.pop('frasa_manual_result', None)
+            
             filename = secure_filename(file.filename)
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             file.save(filepath)
