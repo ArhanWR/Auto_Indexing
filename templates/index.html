@@ -109,8 +109,7 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <button type="submit" form="hapusForm_{{ loop.index }}" class="btn btn-sm btn-danger">🗑 Hapus</button>
-                                    <form id="hapusForm_{{ loop.index }}" action="{{ url_for('hapus_frasa', frasa=item.frasa) }}" method="post"></form>
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="submitDelete('{{ item.frasa }}')">🗑 Hapus</button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -120,6 +119,15 @@
             </div>
             {% endif %}
         </form>
+        <!-- FORM DAN SCRIPT TOMBOL HAPUS -->
+        <form id="hapusForm" action="{{ url_for('hapus_frasa', frasa='') }}" method="post" style="display:none;"></form>
+        <script>
+            function submitDelete(frasa) {
+                const form = document.getElementById('hapusForm');
+                form.action = `/hapus_frasa/${encodeURIComponent(frasa)}`;
+                form.submit();
+            }
+        </script>
 
         {% if download_link %}
             <div class="alert alert-success text-center">
