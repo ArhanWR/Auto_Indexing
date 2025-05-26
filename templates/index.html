@@ -91,6 +91,7 @@
                                 <th>Pilih</th>
                                 <th>Frasa</th>
                                 <th>Halaman</th>
+                                <th>Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -106,6 +107,10 @@
                                     {% else %}
                                         <em>Tidak ditemukan</em>
                                     {% endif %}
+                                </td>
+                                <td>
+                                    <button type="submit" form="hapusForm_{{ loop.index }}" class="btn btn-sm btn-danger">🗑 Hapus</button>
+                                    <form id="hapusForm_{{ loop.index }}" action="{{ url_for('hapus_frasa', frasa=item.frasa) }}" method="post"></form>
                                 </td>
                             </tr>
                             {% endfor %}
