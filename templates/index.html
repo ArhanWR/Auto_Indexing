@@ -136,6 +136,7 @@
 <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 
+<!-- Fitur Halaman Pagitation -->
 <script>
 $(document).ready(function () {
     $('#tfidfTable').DataTable({ pageLength: 10 });
@@ -147,6 +148,7 @@ $(document).ready(function () {
 });
 </script>
 
+<!-- Fitur Buffering Loading Proses -->
 <script>
 $('form').on('submit', function () {
     $('#submitBtn').prop('disabled', true);
@@ -155,6 +157,7 @@ $('form').on('submit', function () {
 });
 </script>
 
+<!-- Warning Pemilihan Frasa jika belum Dipilih -->
 <script>
 document.getElementById('downloadSelectedBtn')?.addEventListener('click', function () {
     const checkboxes = document.querySelectorAll('input[name="selected_keywords"]:checked');
