@@ -250,7 +250,6 @@ def index():
 
             documents = read_pdf_with_pages(filepath)
             title = manual_title
-            title_tokens = preprocess_text(title)
             rake_result = extract_rake_keywords(documents, title=title)
             # Convert semua float32 jadi float biasa agar bisa disimpan
             rake_result_clean = convert_floats_to_native(rake_result)
