@@ -421,17 +421,28 @@ def evaluasi():
         # Ambil hasil frasa dari session
         combined_result = session.get('results', {}).get('combined', {})
 
-        # Normalisasi dan filter frasa hasil indexing otomatis
+        # Fungsi preprocessing frasa
         def preprocess_phrases(phrases):
-            return set(
-                term.lower().strip()
-                for term in phrases
-                if any(c.isalpha() for c in term) and len(term.strip()) > 1
-            )
-        
+            roman_numerals = {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}
+            cleaned = set()
+
+            for phrase in phrases:
+                # Pisahkan berdasarkan simbol pemisah frasa umum
+                parts = re.split(r"\s*[·.,;:\-–—_]\s*", phrase.lower().strip())
+                for part in parts:
+                    part = part.strip(" .,;:-–—")
+                    if (
+                        any(c.isalpha() for c in part)
+                        and len(part) > 1
+                        and part not in roman_numerals
+                        and not re.fullmatch(r"[a-zA-Z]", part)
+                    ):
+                        cleaned.add(part)
+            return cleaned
+
+        # Bersihkan hasil frasa sistem dan ground truth
         generated_keywords = preprocess_phrases(combined_result.keys())
 
-        # Ekstrak dan bersihkan keyword dari indeks PDF referensi
         def extract_keywords_from_pdf(pdf_path):
             doc = fitz.open(pdf_path)
             keywords = set()
@@ -439,14 +450,13 @@ def evaluasi():
                 text = page.get_text()
                 lines = text.split("\n")
                 for line in lines:
-                    parts = line.strip().split(",")
+                    parts = re.split(r"\s*[·,;:\-–—_]\s*", line.strip())
                     for part in parts:
-                        phrase = " ".join([w for w in part.strip().split() if not w.isdigit()])
+                        phrase = " ".join(w for w in part.strip().split() if not w.isdigit())
                         phrase = phrase.lower().strip()
-                        # Hanya simpan jika ada huruf dan panjang frasa lebih dari 1 karakter
                         if any(c.isalpha() for c in phrase) and len(phrase) > 1:
                             keywords.add(phrase)
-            return keywords
+            return preprocess_phrases(keywords)
 
         ground_truth_keywords = extract_keywords_from_pdf(gt_path)
 
