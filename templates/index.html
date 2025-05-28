@@ -129,6 +129,34 @@
             }
         </script>
 
+        <form method="post" action="/evaluasi" enctype="multipart/form-data" class="mb-4">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    🧪 Evaluasi Precision & Recall
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="ground_truth" class="form-label">Unggah PDF Indeks Referensi (Ground Truth)</label>
+                        <input type="file" class="form-control" name="ground_truth" accept=".pdf" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Proses Evaluasi</button>
+                </div>
+            </div>
+        </form>
+
+        {% if evaluation_result %}
+        <div class="card mt-3">
+            <div class="card-header bg-success text-white">Hasil Evaluasi</div>
+            <div class="card-body">
+            <p><strong>Precision:</strong> {{ evaluation_result.precision }}</p>
+            <p><strong>Recall:</strong> {{ evaluation_result.recall }}</p>
+            <p><strong>True Positives:</strong> {{ evaluation_result.tp | join(", ") }}</p>
+            <p><strong>False Positives:</strong> {{ evaluation_result.fp | join(", ") }}</p>
+            <p><strong>False Negatives:</strong> {{ evaluation_result.fn | join(", ") }}</p>
+            </div>
+        </div>
+        {% endif %}
+
         {% if download_link %}
             <div class="alert alert-success text-center">
                 ✅ Index berhasil ditambahkan ke PDF. <br>

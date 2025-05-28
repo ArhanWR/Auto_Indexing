@@ -3,7 +3,7 @@ Sistem Automatic Indexing Dokumen/Buku Digital
 
 Cara menjalankan:
 1. Pastikan sudah menginstall dependensi: <br>
-``` pip install flask nltk gensim PyPDF2 rake-nltk Sastrawi scikit-learn PyMuPDF reportlab ```<br>
+``` pip install flask nltk gensim PyPDF2 rake-nltk Sastrawi scikit-learn PyMuPDF reportlab Flask-Session ```<br>
 (jika terjadi error, pastikan sudah menginstall python (python digunakan versi 3.11), lalu menginstall pip pythonnya dengan ``` python -m ensurepip --upgrade ```)<br><br>
 2. Download pre-trained FastText model<br>
 Karena file model .vec terlalu besar untuk disimpan di GitHub, kamu perlu mengunduhnya manual:<br>

@@ -28,3 +28,4 @@ env/
 # Folders
 /uploads/
 /results/
+/flask_session/

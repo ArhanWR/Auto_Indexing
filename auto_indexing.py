@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, send_file, session, redirect
+from flask import Flask, render_template, request, send_file, session, redirect, url_for
+from flask_session import Session
 import os
 from werkzeug.utils import secure_filename
 from PyPDF2 import PdfReader
@@ -28,6 +29,9 @@ RESULT_FOLDER = 'results'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(RESULT_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['SESSION_TYPE'] = 'filesystem'  # Bisa juga 'redis', 'mongodb', dsb
+app.config['SESSION_PERMANENT'] = False
+Session(app)
 
 ALLOWED_EXTENSIONS = {'pdf'}
 
@@ -402,6 +406,68 @@ def hapus_frasa(frasa):
     session['download_link'] = f"/download/{os.path.basename(final_pdf)}"
 
     return redirect('/')
+
+@app.route('/evaluasi', methods=['POST'])
+def evaluasi():
+    if 'ground_truth' not in request.files:
+        return redirect(url_for('index'))
+
+    gt_file = request.files['ground_truth']
+    if gt_file and allowed_file(gt_file.filename):
+        gt_filename = secure_filename(gt_file.filename)
+        gt_path = os.path.join(UPLOAD_FOLDER, gt_filename)
+        gt_file.save(gt_path)
+
+        # Ambil hasil frasa dari session
+        combined_result = session.get('results', {}).get('combined', {})
+
+        # Normalisasi dan filter frasa hasil indexing otomatis
+        def preprocess_phrases(phrases):
+            return set(
+                term.lower().strip()
+                for term in phrases
+                if any(c.isalpha() for c in term) and len(term.strip()) > 1
+            )
+        
+        generated_keywords = preprocess_phrases(combined_result.keys())
+
+        # Ekstrak dan bersihkan keyword dari indeks PDF referensi
+        def extract_keywords_from_pdf(pdf_path):
+            doc = fitz.open(pdf_path)
+            keywords = set()
+            for page in doc:
+                text = page.get_text()
+                lines = text.split("\n")
+                for line in lines:
+                    parts = line.strip().split(",")
+                    for part in parts:
+                        phrase = " ".join([w for w in part.strip().split() if not w.isdigit()])
+                        phrase = phrase.lower().strip()
+                        # Hanya simpan jika ada huruf dan panjang frasa lebih dari 1 karakter
+                        if any(c.isalpha() for c in phrase) and len(phrase) > 1:
+                            keywords.add(phrase)
+            return keywords
+
+        ground_truth_keywords = extract_keywords_from_pdf(gt_path)
+
+        # Evaluasi
+        true_positives = generated_keywords & ground_truth_keywords
+        false_positives = generated_keywords - ground_truth_keywords
+        false_negatives = ground_truth_keywords - generated_keywords
+
+        precision = len(true_positives) / len(generated_keywords) if generated_keywords else 0
+        recall = len(true_positives) / len(ground_truth_keywords) if ground_truth_keywords else 0
+
+        evaluation_result = {
+            "precision": round(precision, 4),
+            "recall": round(recall, 4),
+            "tp": sorted(true_positives),
+            "fp": sorted(false_positives),
+            "fn": sorted(false_negatives)
+        }
+
+        results = session.get('results', {})
+        return render_template("index.html", evaluation_result=evaluation_result, results=results)
 
 @app.route('/download/<filename>')
 def download(filename):
