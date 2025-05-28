@@ -466,8 +466,7 @@ def evaluasi():
             "fn": sorted(false_negatives)
         }
 
-        results = session.get('results', {})
-        return render_template("index.html", evaluation_result=evaluation_result, results=results)
+        return render_template("index.html", evaluation_result=evaluation_result)
 
 @app.route('/download/<filename>')
 def download(filename):
