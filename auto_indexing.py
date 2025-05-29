@@ -421,23 +421,29 @@ def evaluasi():
         # Ambil hasil frasa dari session
         combined_result = session.get('results', {}).get('combined', {})
 
-        # Fungsi preprocessing frasa
         def preprocess_phrases(phrases):
-            roman_numerals = {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"}
+            roman_numerals = {"i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", 
+                              "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx"}
             cleaned = set()
 
             for phrase in phrases:
-                # Pisahkan berdasarkan simbol pemisah frasa umum
-                parts = re.split(r"\s*[·.,;:\-–—_]\s*", phrase.lower().strip())
-                for part in parts:
-                    part = part.strip(" .,;:-–—")
-                    if (
-                        any(c.isalpha() for c in part)
-                        and len(part) > 1
-                        and part not in roman_numerals
-                        and not re.fullmatch(r"[a-zA-Z]", part)
-                    ):
-                        cleaned.add(part)
+                phrase = phrase.strip()
+
+                # Hanya ambil bagian luar tanda kurung (abaikan isi dalam kurung)
+                phrase = re.sub(r"\(.*?\)", "", phrase)
+
+                # Bersihkan simbol dan whitespace ganda
+                phrase = re.sub(r"[^\w\s]", "", phrase)  # hapus simbol kecuali spasi
+                phrase = re.sub(r"\s+", " ", phrase).lower().strip()
+
+                if (
+                    any(c.isalpha() for c in phrase)
+                    and len(phrase) > 1
+                    and phrase not in roman_numerals
+                    and not re.fullmatch(r"[a-zA-Z]", phrase)
+                ):
+                    cleaned.add(phrase)
+
             return cleaned
 
         # Bersihkan hasil frasa sistem dan ground truth
