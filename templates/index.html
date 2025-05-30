@@ -159,6 +159,7 @@
         <div class="card-body">
         <p><strong>Precision:</strong> {{ evaluation_result.precision }}</p>
         <p><strong>Recall:</strong> {{ evaluation_result.recall }}</p>
+        <p><strong>Cosine Similarity:</strong> {{ evaluation_result.cosine_similarity }}</p>
         <p><strong>True Positives:</strong> {{ evaluation_result.tp | join(", ") }}</p>
         <p><strong>False Positives:</strong> {{ evaluation_result.fp | join(", ") }}</p>
         <p><strong>False Negatives:</strong> {{ evaluation_result.fn | join(", ") }}</p>

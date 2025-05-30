@@ -17,6 +17,8 @@ import io
 from collections import defaultdict
 from collections import Counter
 from textwrap import wrap
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 # Setup
 nltk.download('stopwords')
@@ -80,45 +82,46 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_rake_keywords(documents, title="", min_length=1, max_length=3):
+def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_by="frequency"): # bisa diganti rake_score atau frequency
     rake = Rake(stopwords=stop_words)
     phrase_counter = Counter()
     page_map = {}
+    phrase_scores = {}
 
     for page_number, page_text in documents:
         cleaned_text = clean_text(page_text)
         rake.extract_keywords_from_text(cleaned_text)
 
-        all_keywords = rake.get_ranked_phrases()
-        filtered_keywords = []
-        for kw in all_keywords:
+        ranked_with_scores = rake.get_ranked_phrases_with_scores()
+        for score, kw in ranked_with_scores:
             words = kw.split()
             if (
                 min_length <= len(words) <= max_length and
                 all(w.isalpha() and len(w) >= 3 for w in words)
             ):
-                filtered_keywords.append(kw)
-
-        for kw in filtered_keywords:
-            phrase_counter[kw] += cleaned_text.lower().count(kw.lower())
-            page_map.setdefault(kw, set()).add(page_number)
+                phrase_counter[kw] += cleaned_text.lower().count(kw.lower())
+                page_map.setdefault(kw, set()).add(page_number)
+                phrase_scores[kw] = max(phrase_scores.get(kw, 0), score)
 
     scored_phrases = []
     for phrase, freq in phrase_counter.items():
         sim_score = float(compute_similarity(phrase, title)) if title else 0.0
         if 0.3 <= sim_score <= 1.0:
-            scored_phrases.append((phrase, freq, sim_score))
-            
-    # Urutkan berdasarkan frekuensi tertinggi, ambil top 100
-    sorted_phrases = sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:100]
+            scored_phrases.append((phrase, freq, phrase_scores.get(phrase, 0), sim_score))
+
+    if sort_by == "rake_score":
+        sorted_phrases = sorted(scored_phrases, key=lambda x: x[2], reverse=True)[:100]
+    else:  # default to frequency
+        sorted_phrases = sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:100]
 
     result = {
         phrase: {
             "frequency": freq,
+            "rake_score": round(rake_score, 4),
             "similarity": round(sim_score, 4),
             "pages": sorted(page_map.get(phrase, []))
         }
-        for phrase, freq, sim_score in sorted_phrases
+        for phrase, freq, rake_score, sim_score in sorted_phrases
     }
 
     return result
@@ -407,6 +410,29 @@ def hapus_frasa(frasa):
 
     return redirect('/')
 
+# EVALUASI PRECISION RECALL DAN COSINE SIMILARITY
+def get_phrase_vector(phrase, model):
+    words = phrase.split()
+    vectors = [model[word] for word in words if word in model]
+    if not vectors:
+        return np.zeros(model.vector_size)
+    return np.mean(vectors, axis=0)
+
+def average_cosine_similarity(set1, set2, model):
+    total_sim = 0
+    count = 0
+    for p1 in set1:
+        vec1 = get_phrase_vector(p1, model)
+        best_sim = 0
+        for p2 in set2:
+            vec2 = get_phrase_vector(p2, model)
+            sim = cosine_similarity([vec1], [vec2])[0][0]
+            if sim > best_sim:
+                best_sim = sim
+        total_sim += best_sim
+        count += 1
+    return total_sim / count if count > 0 else 0
+
 @app.route('/evaluasi', methods=['POST'])
 def evaluasi():
     if 'ground_truth' not in request.files:
@@ -473,10 +499,12 @@ def evaluasi():
 
         precision = len(true_positives) / len(generated_keywords) if generated_keywords else 0
         recall = len(true_positives) / len(ground_truth_keywords) if ground_truth_keywords else 0
+        cosine_sim = average_cosine_similarity(generated_keywords, ground_truth_keywords, w2v_model)
 
         evaluation_result = {
             "precision": round(precision, 4),
             "recall": round(recall, 4),
+            "cosine_similarity": round(cosine_sim, 4),
             "tp": sorted(true_positives),
             "fp": sorted(false_positives),
             "fn": sorted(false_negatives)
