@@ -82,8 +82,8 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_by="frequency"): # bisa diganti rake_score atau frequency
-    rake = Rake(stopwords=stop_words)
+def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_by="frequency"):
+    rake = Rake(stopwords=stop_words)     # bisa diganti rake_score atau frequency, ini ^
     phrase_counter = Counter()
     page_map = {}
     phrase_scores = {}
