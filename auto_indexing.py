@@ -82,8 +82,8 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_by="frequency"):
-    rake = Rake(stopwords=stop_words)     # bisa diganti rake_score atau frequency, ini ^
+def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_by="rake_score"):
+    rake = Rake(stopwords=stop_words) # bisa diganti rake_score atau rake_similarity, ini ^
     phrase_counter = Counter()
     page_map = {}
     phrase_scores = {}
@@ -106,13 +106,12 @@ def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_
     scored_phrases = []
     for phrase, freq in phrase_counter.items():
         sim_score = float(compute_similarity(phrase, title)) if title else 0.0
-        if 0.3 <= sim_score <= 1.0:
+        if sort_by == "rake_score" and 0.3 <= sim_score <= 1.0:
+            scored_phrases.append((phrase, freq, phrase_scores.get(phrase, 0), sim_score))
+        elif sort_by == "rake_similarity" and 0.5 <= sim_score <= 1.0:
             scored_phrases.append((phrase, freq, phrase_scores.get(phrase, 0), sim_score))
 
-    if sort_by == "rake_score":
-        sorted_phrases = sorted(scored_phrases, key=lambda x: x[2], reverse=True)[:100]
-    else:  # default to frequency
-        sorted_phrases = sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:100]
+    sorted_phrases = sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:100]
 
     result = {
         phrase: {

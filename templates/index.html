@@ -58,7 +58,6 @@
                                 <th>Pilih</th>
                                 <th>Frasa Kunci</th>
                                 <th>Halaman</th>
-                                <th>Frekuensi</th>
                                 <th>Skor RAKE</th>
                                 <th>Similaritas</th>
                             </tr>
@@ -71,7 +70,6 @@
                             </td>
                             <td>{{ keyword }}</td>
                             <td>{{ data.pages | join(', ') }}</td>
-                            <td>{{ data.frequency }}</td>
                             <td>{{ data.rake_score }}</td>
                             <td>{{ "%.2f"|format(data.similarity) }}</td>
                         </tr>
