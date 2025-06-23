@@ -331,7 +331,7 @@ def generate_pdf():
     # Gabungkan hasil terpilih dari RAKE dan manual
     combined_result = {**filtered_rake, **filtered_manual}
     index_pdf = os.path.join(RESULT_FOLDER, 'selected_indexing.pdf')
-    final_pdf = os.path.join(RESULT_FOLDER, 'final_selected.pdf')
+    final_pdf = os.path.join(RESULT_FOLDER, 'RAKE-Word2Vec_selected.pdf')
 
     create_index_pdf(combined_result, index_pdf)
     merge_pdfs(original_pdf_path, index_pdf, final_pdf)
