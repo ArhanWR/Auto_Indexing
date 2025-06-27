@@ -38,7 +38,7 @@ Session(app)
 ALLOWED_EXTENSIONS = {'pdf'}
 
 # Load stopwords & stemmer
-stop_words = set(stopwords.words('indonesian') + stopwords.words('english'))
+stop_words = set(stopwords.words('indonesian'))
 stemmer = StemmerFactory().create_stemmer()
 
 # Load pre-trained fastText model
@@ -71,6 +71,8 @@ def clean_text(text):
     return text.lower()   
 
 def compute_similarity(phrase, title):
+    phrase_tokens = preprocess_text(phrase)
+    title_tokens = preprocess_text(title)
     phrase_tokens = [w for w in phrase.lower().split() if w in w2v_model]
     title_tokens = [w for w in title.lower().split() if w in w2v_model]
 
