@@ -57,8 +57,24 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def read_pdf_with_pages(file_path):
+    def detect_page_number(text):
+        lines = text.strip().split('\n')
+        for line in (lines[:2] + lines[-2:]):  # cek baris awal & akhir (header/footer)
+            match = re.search(r'\b\d{1,3}\b', line.strip())
+            if match:
+                return int(match.group())
+        return None
+
     reader = PdfReader(file_path)
-    return [(i + 1, page.extract_text()) for i, page in enumerate(reader.pages) if page.extract_text()]
+    result = []
+
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text()
+        if text:
+            real_page = detect_page_number(text)
+            result.append((real_page if real_page else i + 1, text))
+
+    return result
 
 def preprocess_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
@@ -83,8 +99,8 @@ def compute_similarity(phrase, title):
     except:
         return 0.0
 
-def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_by="rake_score"):
-    rake = Rake(stopwords=stop_words) # bisa diganti rake_score atau rake_similarity, ini ^
+def extract_rake_keywords(documents, title="", min_length=1, max_length=3, min_similarity=0.3):
+    rake = Rake(stopwords=stop_words)
     phrase_counter = Counter()
     page_map = {}
     phrase_scores = {}
@@ -107,9 +123,7 @@ def extract_rake_keywords(documents, title="", min_length=1, max_length=3, sort_
     scored_phrases = []
     for phrase, freq in phrase_counter.items():
         sim_score = float(compute_similarity(phrase, title)) if title else 0.0
-        if sort_by == "rake_score" and 0.3 <= sim_score <= 1.0:
-            scored_phrases.append((phrase, freq, phrase_scores.get(phrase, 0), sim_score))
-        elif sort_by == "rake_similarity" and 0.5 <= sim_score <= 1.0:
+        if sim_score >= min_similarity:
             scored_phrases.append((phrase, freq, phrase_scores.get(phrase, 0), sim_score))
 
     sorted_phrases = sorted(scored_phrases, key=lambda x: x[1], reverse=True)[:100]
